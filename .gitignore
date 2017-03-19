@@ -61,3 +61,7 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+#Custom Removed
+OriginalSim/
+TestFiles/
