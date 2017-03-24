@@ -254,7 +254,10 @@ public class Memory extends AbstractTableModel
         }
         if (n == 0) {
             if (o != null) {
-                Console.println(this.setBreakPoint(breakPoint));
+            	if (this.breakPoints[breakPoint])
+            		Console.println(this.clearBreakPoint(breakPoint));
+            	else
+            		Console.println(this.setBreakPoint(breakPoint));
             }
             else {
                 Console.println(this.clearBreakPoint(breakPoint));

@@ -805,6 +805,34 @@ public class CommandLine
                 return "Error: clear is only available in GUI mode";
             }
         });
+        this.commands.put("goto", new Command(){
+
+			@Override
+			public String getUsage() {
+				return "goto [line]";
+			}
+
+			@Override
+			public String getHelp() {
+				return "Scrolls to the line number in memory";
+			}
+
+			@Override
+			public String doCommand(String[] array, int n) throws ExceptionException {
+				if (n != 2)
+					return "Error: Invalid number of arguments";
+				final int address = CommandLine.this.mac.getAddress(array[1]);
+                if (address == Integer.MAX_VALUE) {
+                    return "Error: Invalid address or label (" + array[1] + ")";
+                }
+                if (PennSim.GRAPHICAL_MODE && address < 65024) {
+                    CommandLine.this.GUI.scrollToIndex(address);
+                }
+                return "";
+			}
+        	
+        });
+        this.commands.put("g", this.commands.get("goto"));
     }
     
     public String runCommand(String replaceFirst) throws ExceptionException, NumberFormatException {
