@@ -833,6 +833,56 @@ public class CommandLine
         	
         });
         this.commands.put("g", this.commands.get("goto"));
+        this.commands.put("reload", new Command(){
+        	@Override
+        	public String getUsage(){
+        		return "reload [file]";
+        	}
+        	@Override
+        	public String getHelp(){
+        		return "Assembles and Loads the file, and resets the PC";
+        	}
+        	
+        	@Override
+        	public String doCommand(String[] array, int n) throws ExceptionException{
+        		if (n != 2)
+        			return "Error: Invalid number of arguments";
+        		int n2 = Word.parseNum("x200");
+        		return as(array, n) + "\n" + ld(array, n) + "\n" + CommandLine.this.setRegister("pc", n2);
+        	}
+        	
+        	
+        	private String as(final String[] array, final int n){
+                if (n < 2 || n > 3) {
+                    return this.getUsage();
+                }
+                final String[] array2 = new String[n - 1];
+                final String s = "";
+                array2[0] = array[1] + ".asm";
+                String s2 = s + array[1];
+                if (n == 3) {
+                    array2[1] = array[2];
+                    s2 = s2 + " " + array[2];
+                }
+                final Assembler assembler = new Assembler();
+                try {
+                    final String as = assembler.as(array2);
+                    if (as.length() != 0) {
+                        return as + "Warnings encountered during assembly " + "(but assembly completed w/o errors).";
+                    }
+                }
+                catch (AsException ex) {
+                    return ex.getMessage() + "\nErrors encountered during assembly.";
+                }
+                return "Assembly of '" + s2 + "' completed without errors or warnings.";
+        	}
+        	private String ld(final String[] array, final int n){
+        		if (n != 2) {
+                    return this.getUsage();
+                }
+                return CommandLine.this.mac.loadObjectFile(new File(array[1] + ".obj"));
+        	}
+        });
     }
     
     public String runCommand(String replaceFirst) throws ExceptionException, NumberFormatException {

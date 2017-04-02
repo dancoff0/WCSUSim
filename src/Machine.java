@@ -406,7 +406,8 @@ public class Machine implements Runnable
     
     public void run() {
         try {
-            this.executePumpedContinues();
+        	if (!this.stopImmediately)
+        		this.executePumpedContinues();
         }
         catch (ExceptionException ex) {
             if (this.gui != null) {
@@ -416,7 +417,7 @@ public class Machine implements Runnable
         }
     }
     
-    public void updateStatusLabel() {
+    public synchronized void updateStatusLabel() {
         if (this.gui != null) {
             if (!this.registers.getClockMCR()) {
                 this.gui.setStatusLabelHalted();
