@@ -20,7 +20,7 @@ public class Console
     }
     
     public static void println(final String s) {
-        if (PennSim.isGraphical()) {
+        if ( WCSUSim.isGraphical()) {
             final Iterator<PrintableConsole> iterator = Console.consoles.iterator();
             while (iterator.hasNext()) {
                 iterator.next().print(s + Console.NEWLINE);
@@ -32,7 +32,7 @@ public class Console
     }
     
     public static void clear() {
-        if (PennSim.isGraphical()) {
+        if ( WCSUSim.isGraphical()) {
             final Iterator<PrintableConsole> iterator = Console.consoles.iterator();
             while (iterator.hasNext()) {
                 iterator.next().clear();

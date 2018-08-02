@@ -18,7 +18,7 @@ public class MonitorDevice
     private LinkedList<ActionListener> mlist;
     
     public MonitorDevice() {
-        if (!PennSim.GRAPHICAL_MODE) {
+        if (!WCSUSim.GRAPHICAL_MODE) {
             this.dout = new OutputStreamWriter(System.out);
         }
         else {
@@ -42,7 +42,7 @@ public class MonitorDevice
     }
     
     public boolean ready() {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             return true;
         }
         try {
@@ -56,7 +56,7 @@ public class MonitorDevice
     }
     
     public void reset() {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             final ListIterator<ActionListener> listIterator = this.mlist.listIterator();
             while (listIterator.hasNext()) {
                 listIterator.next().actionPerformed(new ActionEvent(new Integer(1), 0, null));
@@ -65,7 +65,7 @@ public class MonitorDevice
     }
     
     public void write(final char c) {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             final ListIterator<ActionListener> listIterator = this.mlist.listIterator();
             while (listIterator.hasNext()) {
                 listIterator.next().actionPerformed(new ActionEvent(c + "", 0, null));

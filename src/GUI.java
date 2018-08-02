@@ -177,7 +177,7 @@ public class GUI implements ActionListener, TableModelListener
     }
     
     public GUI(final Machine mac, final CommandLine commandLine) {
-        this.frame = new JFrame("PennSim - " + PennSim.version + " - " + PennSim.getISA());
+        this.frame = new JFrame("WCSUSim - " + WCSUSim.version + " - " + WCSUSim.getISA());
         this.fileChooser = new JFileChooser(".");
         this.menuBar = new JMenuBar();
         this.fileMenu = new JMenu("File");
@@ -432,7 +432,7 @@ public class GUI implements ActionListener, TableModelListener
                     this.commandOutputWindow.setVisible(true);
                 }
                 else if ("Version".equals(actionEvent.getActionCommand())) {
-                    JOptionPane.showMessageDialog(this.frame, PennSim.getVersion(), "Version", 1);
+                    JOptionPane.showMessageDialog(this.frame, WCSUSim.getVersion(), "Version", 1);
                 }
                 else if ("Open".equals(actionEvent.getActionCommand())) {
                     if (this.fileChooser.showOpenDialog(this.frame) == 0) {

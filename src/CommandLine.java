@@ -722,7 +722,7 @@ public class CommandLine
                     if (address == Integer.MAX_VALUE) {
                         return "Error: Invalid address or label (" + array[1] + ")";
                     }
-                    if (PennSim.GRAPHICAL_MODE && address < 65024) {
+                    if ( WCSUSim.GRAPHICAL_MODE && address < 65024) {
                         CommandLine.this.GUI.scrollToIndex(address);
                     }
                     return Word.toHex(address) + " : " + CommandLine.this.mac.getMemory().read(address).toHex() + " : " + ISA.disassemble(CommandLine.this.mac.getMemory().read(address), address, CommandLine.this.mac);
@@ -746,7 +746,7 @@ public class CommandLine
                             sb.append("\n");
                         }
                     }
-                    if (PennSim.GRAPHICAL_MODE) {
+                    if ( WCSUSim.GRAPHICAL_MODE) {
                         CommandLine.this.GUI.scrollToIndex(address2);
                     }
                     return new String(sb);
@@ -798,7 +798,7 @@ public class CommandLine
             }
             
             public String doCommand(final String[] array, final int n) {
-                if (PennSim.GRAPHICAL_MODE) {
+                if ( WCSUSim.GRAPHICAL_MODE) {
                     Console.clear();
                     return "";
                 }
@@ -825,7 +825,7 @@ public class CommandLine
                 if (address == Integer.MAX_VALUE) {
                     return "Error: Invalid address or label (" + array[1] + ")";
                 }
-                if (PennSim.GRAPHICAL_MODE && address < 65024) {
+                if ( WCSUSim.GRAPHICAL_MODE && address < 65024) {
                     CommandLine.this.GUI.scrollToIndex(address);
                 }
                 return "";
@@ -931,7 +931,7 @@ public class CommandLine
     }
     
     public void scrollToPC() {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             this.GUI.scrollToPC();
         }
     }

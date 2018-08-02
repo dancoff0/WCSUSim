@@ -13,43 +13,43 @@ public abstract class TableModel extends AbstractTableModel
 	private static final long serialVersionUID = -127502035291381175L;
 
 	public void fireTableCellUpdated(final int n, final int n2) {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             super.fireTableCellUpdated(n, n2);
         }
     }
     
     public void fireTableChanged(final TableModelEvent tableModelEvent) {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             super.fireTableChanged(tableModelEvent);
         }
     }
     
     public void fireTableDataChanged() {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             super.fireTableDataChanged();
         }
     }
     
     public void fireTableRowsUpdated(final int n, final int n2) {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             super.fireTableRowsUpdated(n, n2);
         }
     }
     
     public void fireTableRowsInserted(final int n, final int n2) {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             super.fireTableRowsInserted(n, n2);
         }
     }
     
     public void fireTableRowsDeleted(final int n, final int n2) {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             super.fireTableRowsDeleted(n, n2);
         }
     }
     
     public void fireTableStructureChanged() {
-        if (PennSim.GRAPHICAL_MODE) {
+        if ( WCSUSim.GRAPHICAL_MODE) {
             super.fireTableStructureChanged();
         }
     }

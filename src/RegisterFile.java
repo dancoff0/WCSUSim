@@ -28,7 +28,7 @@ public class RegisterFile extends AbstractTableModel
         this.colNames = new String[] { "Register", "Value", "Register", "Value" };
         this.regArr = new Word[8];
         this.machine = machine;
-        if (!PennSim.isLC3()) {
+        if (!WCSUSim.isLC3()) {
             RegisterFile.indNames[11] = "";
         }
         for (int i = 0; i < 8; ++i) {
@@ -93,7 +93,7 @@ public class RegisterFile extends AbstractTableModel
                 return this.PSR.toHex();
             }
             if (n == 5) {
-                if (PennSim.isLC3()) {
+                if ( WCSUSim.isLC3()) {
                     return this.printCC();
                 }
                 return "";
