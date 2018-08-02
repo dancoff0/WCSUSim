@@ -10,13 +10,13 @@ class AsException extends Exception
   private static final long serialVersionUID = -1299640770849672386L;
   public Instruction insn;
 
-  AsException( final Instruction insn, final String s )
+  public AsException( final Instruction insn, final String s )
   {
     super( s );
     this.insn = insn;
   }
 
-  AsException( final String s )
+  public AsException( final String s )
   {
     super( s );
   }

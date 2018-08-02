@@ -4,13 +4,15 @@
 
 class TempRun implements Runnable
 {
-    GUI ms;
-    
-    public TempRun(final GUI ms) {
-        this.ms = ms;
-    }
-    
-    public void run() {
-        this.ms.setUpGUI();
-    }
+  GUI ms;
+
+  public TempRun( final GUI ms )
+  {
+    this.ms = ms;
+  }
+
+  public void run()
+  {
+    this.ms.setUpGUI();
+  }
 }

@@ -12,78 +12,99 @@ import java.io.OutputStreamWriter;
 
 public class MonitorDevice
 {
-    private static final Word MONITOR_READY;
-    private static final Word MONITOR_NOTREADY;
-    private OutputStreamWriter dout;
-    private LinkedList<ActionListener> mlist;
-    
-    public MonitorDevice() {
-        if (!WCSUSim.GRAPHICAL_MODE) {
-            this.dout = new OutputStreamWriter(System.out);
-        }
-        else {
-            this.mlist = new LinkedList<ActionListener>();
-        }
+  private static final Word MONITOR_READY;
+  private static final Word MONITOR_NOTREADY;
+  private OutputStreamWriter dout;
+  private LinkedList<ActionListener> mlist;
+
+  public MonitorDevice()
+  {
+    if( !WCSUSim.GRAPHICAL_MODE )
+    {
+      this.dout = new OutputStreamWriter( System.out );
     }
-    
-    public MonitorDevice(final OutputStream outputStream) {
-        this.dout = new OutputStreamWriter(outputStream);
+    else
+    {
+      this.mlist = new LinkedList<ActionListener>();
     }
-    
-    public void addActionListener(final ActionListener actionListener) {
-        this.mlist.add(actionListener);
+  }
+
+  public MonitorDevice( final OutputStream outputStream )
+  {
+    this.dout = new OutputStreamWriter( outputStream );
+  }
+
+  public void addActionListener( final ActionListener actionListener )
+  {
+    this.mlist.add( actionListener );
+  }
+
+  public Word status()
+  {
+    if( this.ready() )
+    {
+      return MonitorDevice.MONITOR_READY;
     }
-    
-    public Word status() {
-        if (this.ready()) {
-            return MonitorDevice.MONITOR_READY;
-        }
-        return MonitorDevice.MONITOR_NOTREADY;
+    return MonitorDevice.MONITOR_NOTREADY;
+  }
+
+  public boolean ready()
+  {
+    if( WCSUSim.GRAPHICAL_MODE )
+    {
+      return true;
     }
-    
-    public boolean ready() {
-        if ( WCSUSim.GRAPHICAL_MODE) {
-            return true;
-        }
-        try {
-            this.dout.flush();
-            return true;
-        }
-        catch (IOException ex) {
-            ErrorLog.logError(ex);
-            return false;
-        }
+    try
+    {
+      this.dout.flush();
+      return true;
     }
-    
-    public void reset() {
-        if ( WCSUSim.GRAPHICAL_MODE) {
-            final ListIterator<ActionListener> listIterator = this.mlist.listIterator();
-            while (listIterator.hasNext()) {
-                listIterator.next().actionPerformed(new ActionEvent(new Integer(1), 0, null));
-            }
-        }
+    catch( IOException ex )
+    {
+      ErrorLog.logError( ex );
+      return false;
     }
-    
-    public void write(final char c) {
-        if ( WCSUSim.GRAPHICAL_MODE) {
-            final ListIterator<ActionListener> listIterator = this.mlist.listIterator();
-            while (listIterator.hasNext()) {
-                listIterator.next().actionPerformed(new ActionEvent(c + "", 0, null));
-            }
-        }
-        else {
-            try {
-                this.dout.write(c);
-                this.dout.flush();
-            }
-            catch (IOException ex) {
-                ErrorLog.logError(ex);
-            }
-        }
+  }
+
+  public void reset()
+  {
+    if( WCSUSim.GRAPHICAL_MODE )
+    {
+      final ListIterator<ActionListener> listIterator = this.mlist.listIterator();
+      while( listIterator.hasNext() )
+      {
+        listIterator.next().actionPerformed( new ActionEvent( new Integer( 1 ), 0, null ) );
+      }
     }
-    
-    static {
-        MONITOR_READY = new Word(32768);
-        MONITOR_NOTREADY = new Word(0);
+  }
+
+  public void write( final char c )
+  {
+    if( WCSUSim.GRAPHICAL_MODE )
+    {
+      final ListIterator<ActionListener> listIterator = this.mlist.listIterator();
+      while( listIterator.hasNext() )
+      {
+        listIterator.next().actionPerformed( new ActionEvent( c + "", 0, null ) );
+      }
     }
+    else
+    {
+      try
+      {
+        this.dout.write( c );
+        this.dout.flush();
+      }
+      catch( IOException ex )
+      {
+        ErrorLog.logError( ex );
+      }
+    }
+  }
+
+  static
+  {
+    MONITOR_READY = new Word( 32768 );
+    MONITOR_NOTREADY = new Word( 0 );
+  }
 }
