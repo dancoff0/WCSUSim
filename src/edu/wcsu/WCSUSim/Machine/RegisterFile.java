@@ -6,10 +6,7 @@ import edu.wcsu.WCSUSim.WCSUSim;
 
 import javax.swing.table.AbstractTableModel;
 
-// 
-// Decompiled by Procyon v0.5.30
-// 
-
+// This class implements the Register File for the LC3 computer
 public class RegisterFile extends AbstractTableModel
 {
   /**
@@ -295,19 +292,33 @@ public class RegisterFile extends AbstractTableModel
     {
       return "invalid";
     }
+
+    // Get the NZP values.
+    String ccValue = "";
     if( this.getN() )
     {
-      return "N";
+      ccValue = "N";
     }
-    if( this.getZ() )
+    else if( this.getZ() )
     {
-      return "Z";
+      ccValue = "Z";
     }
-    if( this.getP() )
+    else if( this.getP() )
     {
-      return "P";
+      ccValue =  "P";
     }
-    return "unset";
+    else
+    {
+      ccValue = "unset";
+    }
+
+    // Now add the 'C' value
+    if( getC() )
+    {
+      ccValue += "C";
+    }
+
+    return ccValue;
   }
 
   public int getPSR()
@@ -386,8 +397,8 @@ public class RegisterFile extends AbstractTableModel
   // Set the value of the carry register
   public void setC( int newValue )
   {
-    // Get the current value in the PSR
-    int currentPSR = PSR.getValue() & 0xFFFFFFF8;
+    // Get the current value in the PSR.
+    int currentPSR = PSR.getValue() & 0xFFFF;
 
     int newPSR;
     if( newValue == 0 )
