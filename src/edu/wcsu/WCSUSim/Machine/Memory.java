@@ -46,7 +46,7 @@ public class Memory extends AbstractTableModel
   public Memory( final Machine machine )
   {
     this.memArr = new Word[65536];
-    this.colNames = new String[]{ "BP", "Address", "Value", "edu.wcsu.WCSUSim.edu.wcsu.WCSUSim.Machine.Machine.Instruction" };
+    this.colNames = new String[]{ "BP", "Address", "Value", "Instruction" };
     this.nextBreakPoints = new boolean[65536];
     this.breakPoints = new boolean[65536];
     this.kbDevice = new KeyboardDevice();

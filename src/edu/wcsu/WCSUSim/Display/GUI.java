@@ -94,7 +94,7 @@ public class GUI implements ActionListener, TableModelListener
     private void setupMemoryPanel() {
         this.memoryPanel.add(this.memScrollPane, "Center");
         this.memoryPanel.setMinimumSize(new Dimension(400, 100));
-        this.memoryPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("edu.wcsu.WCSUSim.Machine.Memory"), BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        this.memoryPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Memory"), BorderFactory.createEmptyBorder(5, 5, 5, 5)));
         this.memTable.getModel().addTableModelListener(this);
         this.memTable.getModel().addTableModelListener(this.video);
         this.memTable.getModel().addTableModelListener((TableModelListener)this.memScrollPane.getVerticalScrollBar());
@@ -108,17 +108,17 @@ public class GUI implements ActionListener, TableModelListener
         this.nextButton.setActionCommand("Next");
         this.nextButton.addActionListener(this);
         gridBagConstraints.weightx = 1.0;
-        gridBagConstraints.gridx = 0;
+        gridBagConstraints.gridx = 1;
         gridBagConstraints.gridy = 0;
         this.controlPanel.add(this.nextButton, gridBagConstraints);
         this.stepButton.setActionCommand("Step");
         this.stepButton.addActionListener(this);
-        gridBagConstraints.gridx = 1;
+        gridBagConstraints.gridx = 2;
         gridBagConstraints.gridy = 0;
         this.controlPanel.add(this.stepButton, gridBagConstraints);
         this.continueButton.setActionCommand("Continue");
         this.continueButton.addActionListener(this);
-        gridBagConstraints.gridx = 2;
+        gridBagConstraints.gridx = 0;
         gridBagConstraints.gridy = 0;
         this.controlPanel.add(this.continueButton, gridBagConstraints);
         this.stopButton.setActionCommand("Stop");
@@ -184,7 +184,7 @@ public class GUI implements ActionListener, TableModelListener
     }
     
     public GUI( final Machine mac, final CommandLine commandLine) {
-        this.frame = new JFrame("edu.wcsu.WCSUSim.WCSUSim - " + WCSUSim.version + " - " + WCSUSim.getISA());
+        this.frame = new JFrame("WCSUSim - " + WCSUSim.version + " - " + WCSUSim.getISA());
         this.fileChooser = new JFileChooser(".");
         this.menuBar = new JMenuBar();
         this.fileMenu = new JMenu("File");
@@ -195,9 +195,9 @@ public class GUI implements ActionListener, TableModelListener
         this.versionItem = new JMenuItem("Simulator Version");
         this.leftPanel = new JPanel();
         this.controlPanel = new JPanel();
-        this.nextButton = new JButton("Next");
-        this.stepButton = new JButton("Step");
-        this.continueButton = new JButton("Continue");
+        this.nextButton = new JButton("Step Over");
+        this.stepButton = new JButton("Step Into");
+        this.continueButton = new JButton("Start/Resume");
         this.stopButton = new JButton("Stop");
         this.statusLabel = new JLabel("");
         this.runningColor = new Color(43, 129, 51);
