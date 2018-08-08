@@ -1017,7 +1017,7 @@ public class CommandLine
 
       public String getHelp()
       {
-        return "Clears the commandline output window. Available only in edu.wcsu.WCSUSim.Display.GUI mode.";
+        return "Clears the commandline output window. Available only in GUI mode.";
       }
 
       public String doCommand( final String[] array, final int n )
