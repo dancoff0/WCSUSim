@@ -218,26 +218,71 @@ public class Machine implements Runnable
     String string;
     try
     {
+      // Open the .obj file
       final FileInputStream fileInputStream = new FileInputStream( file );
-      fileInputStream.read( array );
-      int convertByteArray = Word.convertByteArray( array[0], array[1] );
+
+      // Read in the first two bytes and convert them into a word.
+      int bytesRead = fileInputStream.read( array );
+
+      // This should be the "ADDRESS_MARKER"
+      Word testMarker = new Word( Word.convertByteArray( array[0], array[1] ) );
+      if( !testMarker.equals( ISA.ADDRESS_MARKER ) )
+      {
+        throw new IOException( ".obj file did not start with the require address marker: " + testMarker );
+      }
+
+      // Now get the next two bytes. These are the base address
+      bytesRead = fileInputStream.read( array );
+
+      // Convert this into an int. This will be the starting address
+      int baseAddress = Word.convertByteArray( array[0], array[1] );
+
+      // Now loop over the instructions
       while( fileInputStream.read( array ) == 2 )
       {
-        final Integer n = new Integer( convertByteArray );
-        if( this.symbolTable.contains( n ) )
+        // Decide what kind of information this is.
+        int newValue = Word.convertByteArray( array[0], array[1] );
+        System.out.format("newValue = 0x%x\n", newValue );
+        testMarker = new Word( newValue );
+        if( testMarker.equals( ISA.ADDRESS_MARKER ) )
         {
-          this.symbolTable.remove( ((String) this.inverseTable.get( n )).toLowerCase() );
-          this.inverseTable.remove( n );
+          // Get the new address
+          bytesRead = fileInputStream.read( array );
+
+          // Convert this into an int. This will be the starting address
+          baseAddress = Word.convertByteArray( array[0], array[1] );
+
+          //continue;
         }
-        this.memory.write( convertByteArray, Word.convertByteArray( array[0], array[1] ) );
-        ++convertByteArray;
+        else if( testMarker.equals( ISA.DATA_MARKER ) )
+        {
+          // Remove the current address from the symbol table
+          //final Integer n = new Integer( baseAddress );
+          if( this.symbolTable.contains( baseAddress ) )
+          {
+            this.symbolTable.remove( ((String) this.inverseTable.get( baseAddress )).toLowerCase() );
+            this.inverseTable.remove( baseAddress );
+          }
+
+          // Get the new data
+          bytesRead = fileInputStream.read( array );
+
+          // Convert this into an int. This will be the starting address
+          int newData = Word.convertByteArray( array[0], array[1] );
+          this.memory.write( baseAddress, newData );
+          ++baseAddress;
+        }
+        else
+        {
+          throw new IOException( ".obj file contains an unknown MARKER: " + testMarker );
+        }
       }
       fileInputStream.close();
       string = "Loaded object file '" + path + "'";
     }
     catch( IOException ex )
     {
-      return "Error: Could not load object file '" + path + "'";
+      return "Error: Could not load object file '" + path + "'" + ": " + ex.getMessage();
     }
     String substring = path;
     if( path.endsWith( ".obj" ) )

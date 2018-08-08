@@ -21,6 +21,10 @@ public class ISA
   public static HashSet<String> opcodeSet;
   public static Hashtable<String, InstructionDef> formatToDef;
 
+  // Constants
+  public final static Word ADDRESS_MARKER = new Word( 0x1234 );
+  public final static Word DATA_MARKER    = new Word( 0xCDEF );
+
   public static void execute( final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
   {
     final int pc = registerFile.getPC();
@@ -175,8 +179,10 @@ public class ISA
       {
         if( list.size() != 0 )
         {
-          throw new AsException( ".ORIG can only appear at the beginning of a file" );
+          //throw new AsException( ".ORIG can only appear at the beginning of a file" );
         }
+        // Indicate this this is a new address
+        list.add( ADDRESS_MARKER );
         list.add( new Word( instruction.getOffsetImmediate() ) );
       }
 
@@ -194,6 +200,7 @@ public class ISA
     {
       public void encode( final SymTab symTab, final Instruction instruction, final List<Word> list ) throws AsException
       {
+        list.add( DATA_MARKER );
         list.add( new Word( instruction.getOffsetImmediate() ) );
       }
 
@@ -211,6 +218,7 @@ public class ISA
         {
           throw new AsException( instruction, "Undeclared label: '" + instruction.getLabelRef() + "'" );
         }
+        list.add( DATA_MARKER );
         list.add( new Word( lookup ) );
       }
 
@@ -225,6 +233,7 @@ public class ISA
       {
         for( int offsetImmediate = instruction.getOffsetImmediate(), i = 0; i < offsetImmediate; ++i )
         {
+          list.add( DATA_MARKER );
           list.add( new Word( 0 ) );
         }
       }
@@ -245,8 +254,10 @@ public class ISA
       {
         for( int i = 0; i < instruction.getStringz().length(); ++i )
         {
+          list.add( DATA_MARKER );
           list.add( new Word( instruction.getStringz().charAt( i ) ) );
         }
+        list.add( DATA_MARKER );
         list.add( new Word( 0 ) );
       }
 

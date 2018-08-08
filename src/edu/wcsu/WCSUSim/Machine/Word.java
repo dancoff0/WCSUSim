@@ -236,4 +236,9 @@ public class Word
     final int n = 255;
     return ((b3 ? 1 : 0) | (n & b)) << 8 | (n & b2);
   }
+
+  public boolean equals( final Word other )
+  {
+    return this.value == other.getValue();
+  }
 }
