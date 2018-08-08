@@ -101,9 +101,13 @@ public class GUI implements ActionListener, TableModelListener
 
   // Preference values
   private String preferredOSFileLocation;
+  private String preferredObjFileLocation;
+  private String preferredAsmFileLocation;
 
   // Preference keys
-  private final static String OS_KEY = "os_file";
+  private final static String OS_KEY  = "os_file";
+  private final static String ASM_DIR = "asm_directory";
+  private final static String OBJ_DIR = "obj_directory";
 
   private void setupMemoryPanel()
   {
@@ -367,7 +371,9 @@ public class GUI implements ActionListener, TableModelListener
 
     // Look up the preferences for the GUI
     Preferences guiPreferences = Preferences.userNodeForPackage( GUI.class );
-    preferredOSFileLocation = guiPreferences.get( OS_KEY, null );
+    preferredOSFileLocation  = guiPreferences.get( OS_KEY,  null );
+    preferredObjFileLocation = guiPreferences.get( OBJ_DIR, null );
+    preferredAsmFileLocation = guiPreferences.get( ASM_DIR, null );
 
     this.mac.setStoppedListener( this.commandPanel );
     this.objFileChooser.setFileSelectionMode( JFileChooser.FILES_AND_DIRECTORIES );
@@ -388,6 +394,10 @@ public class GUI implements ActionListener, TableModelListener
         return "*.obj";
       }
     } );
+    if( preferredObjFileLocation != null )
+    {
+      objFileChooser.setCurrentDirectory( new File( preferredObjFileLocation ) );
+    }
 
     this.asmFileChooser.setFileSelectionMode( JFileChooser.FILES_AND_DIRECTORIES );
     this.asmFileChooser.addChoosableFileFilter( new FileFilter()
@@ -407,6 +417,12 @@ public class GUI implements ActionListener, TableModelListener
         return "*.asm";
       }
     } );
+    if( preferredAsmFileLocation != null )
+    {
+      asmFileChooser.setCurrentDirectory( new File( preferredAsmFileLocation ) );
+    }
+
+
 
     this.openAsmItem.setActionCommand( "OpenAsm" );
     this.openAsmItem.addActionListener( this );
@@ -578,13 +594,21 @@ public class GUI implements ActionListener, TableModelListener
         }
         else if( "Version".equals( actionEvent.getActionCommand() ) )
         {
-          JOptionPane.showMessageDialog( this.frame, WCSUSim.getVersion(), "Version", 1 );
+          JOptionPane.showMessageDialog( this.frame, WCSUSim.getVersion(), "Version", JOptionPane.INFORMATION_MESSAGE );
         }
         else if( "OpenObj".equals( actionEvent.getActionCommand() ) )
         {
           if( this.objFileChooser.showOpenDialog( this.frame ) == 0 )
           {
-            Console.println( this.mac.loadObjectFile( this.objFileChooser.getSelectedFile() ) );
+            File objFile = this.objFileChooser.getSelectedFile();
+            String currentObjDirectory = objFileChooser.getCurrentDirectory().getAbsolutePath();
+            if( !currentObjDirectory.equals( preferredObjFileLocation ) )
+            {
+              preferredObjFileLocation = currentObjDirectory;
+              Preferences guiPreferences = Preferences.userNodeForPackage( GUI.class );
+              guiPreferences.put( OBJ_DIR, preferredObjFileLocation );
+            }
+            Console.println( this.mac.loadObjectFile( objFile ) );
           }
           else
           {
@@ -598,6 +622,13 @@ public class GUI implements ActionListener, TableModelListener
           {
             final Assembler assembler = new Assembler();
             File asmFile = asmFileChooser.getSelectedFile();
+            String currentAsmDirectory = asmFileChooser.getCurrentDirectory().getAbsolutePath();
+            if( !currentAsmDirectory.equals( preferredAsmFileLocation ) )
+            {
+              preferredAsmFileLocation = currentAsmDirectory;
+              Preferences guiPreferences = Preferences.userNodeForPackage( GUI.class );
+              guiPreferences.put( ASM_DIR, preferredAsmFileLocation );
+            }
             try
             {
               // The assembler expects an array of files to assemble.
