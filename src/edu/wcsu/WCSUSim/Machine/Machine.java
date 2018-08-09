@@ -242,7 +242,6 @@ public class Machine implements Runnable
       {
         // Decide what kind of information this is.
         int newValue = Word.convertByteArray( array[0], array[1] );
-        System.out.format("newValue = 0x%x\n", newValue );
         testMarker = new Word( newValue );
         if( testMarker.equals( ISA.ADDRESS_MARKER ) )
         {
