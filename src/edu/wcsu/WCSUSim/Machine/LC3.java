@@ -333,7 +333,7 @@ public class LC3 extends ISA
     } );
 
     //     Logical Shift left with an immediate bit count
-    ISA.createDef( "SHFli", "1101 ddd sss 1 0 0 iii", new InstructionDef()
+    ISA.createDef( "SHFli", "1101 ddd sss 1 0 0 uuu", new InstructionDef()
     {
       public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
@@ -405,7 +405,7 @@ public class LC3 extends ISA
         }
 
         // Compute the shifted value.
-        int shiftedValue = ( sourceValue >> bitsToShift ) & 0xFFFF;
+        int shiftedValue = ( sourceValue >>> bitsToShift ) & 0xFFFF;
 
         // Set the NZ and P values.
         registerFile.setNZP( shiftedValue );
@@ -420,7 +420,7 @@ public class LC3 extends ISA
     } );
 
     //     Logical Shift right with an immediate bit count
-    ISA.createDef( "SHFri", "1101 ddd sss 1 1 0 iii", new InstructionDef()
+    ISA.createDef( "SHFri", "1101 ddd sss 1 1 0 uuu", new InstructionDef()
     {
       public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
@@ -447,7 +447,7 @@ public class LC3 extends ISA
         }
 
         // Compute the shifted value.
-        int shiftedValue = ( sourceValue >> bitsToShift ) & 0xFFFF;
+        int shiftedValue = ( sourceValue >>> bitsToShift ) & 0xFFFF;
 
         // Set the NZ and P values.
         registerFile.setNZP( shiftedValue );
@@ -491,7 +491,11 @@ public class LC3 extends ISA
         }
 
         // Compute the shifted value.
-        int shiftedValue = ( sourceValue >>> bitsToShift ) & 0xFFFF;
+        //   First shift the value 16 bits to the left so that the sign bit is set.
+        int intermediateValue = sourceValue << 16;
+
+        //   Now shift the value to the right. This will cause the sign bit to be replicated.
+        int shiftedValue = ( ( intermediateValue >> bitsToShift ) >>> 16 ) & 0xFFFF;
 
         // Set the NZ and P values.
         registerFile.setNZP( shiftedValue );
@@ -506,7 +510,7 @@ public class LC3 extends ISA
     } );
 
     //     Logical Shift right with an immediate bit count
-    ISA.createDef( "SHFari", "1101 ddd sss 1 1 1 iii", new InstructionDef()
+    ISA.createDef( "SHFari", "1101 ddd sss 1 1 1 uuu", new InstructionDef()
     {
       public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
@@ -533,7 +537,11 @@ public class LC3 extends ISA
         }
 
         // Compute the shifted value.
-        int shiftedValue = ( sourceValue >>> bitsToShift ) & 0xFFFF;
+        //   First shift the value 16 bits to the left so that the sign bit is set.
+        int intermediateValue = sourceValue << 16;
+
+        //   Now shift the value to the right. This will cause the sign bit to be replicated.
+        int shiftedValue = ( ( intermediateValue >> bitsToShift ) >>> 16 ) & 0xFFFF;
 
         // Set the NZ and P values.
         registerFile.setNZP( shiftedValue );
