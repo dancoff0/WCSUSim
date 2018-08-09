@@ -272,6 +272,7 @@ public abstract class InstructionDef
     {
       throw new AsException( instruction, "Register number out of range" );
     }
+
     try
     {
       if( this.signedImmed.valid )
@@ -285,7 +286,7 @@ public abstract class InstructionDef
     }
     catch( AsException ex2 )
     {
-      throw new AsException( instruction, "Immediate out of range" );
+      throw new AsException( instruction, "Immediate out of range: " + ex2 );
     }
     if( this.pcOffset.valid )
     {

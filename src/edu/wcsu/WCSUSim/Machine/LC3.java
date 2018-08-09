@@ -10,6 +10,28 @@ public class LC3 extends ISA
   public void init()
   {
     super.init();
+
+    // Branch instructions: OPCode 0x0000
+    ISA.createDef( "BR",    "0000 111 ppppppppp", new BranchDef() );
+    ISA.createDef( "BRnzp", "0000 111 ppppppppp", new BranchDef() );
+    ISA.createDef( "BRp",   "0000 001 ppppppppp", new BranchDef() );
+    ISA.createDef( "BRz",   "0000 010 ppppppppp", new BranchDef() );
+    ISA.createDef( "BRzp",  "0000 011 ppppppppp", new BranchDef() );
+    ISA.createDef( "BRn",   "0000 100 ppppppppp", new BranchDef() );
+    ISA.createDef( "BRnp",  "0000 101 ppppppppp", new BranchDef() );
+    ISA.createDef( "BRnz",  "0000 110 ppppppppp", new BranchDef() );
+
+    // NOP instruction: also OPCode 0x0000    It is really a branch on an impossible condition
+    ISA.createDef( "NOP", "0000 000 xxxxxxxxx", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int pc, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        return pc + 1;
+      }
+    } );
+
+    // Arithmetic instructions: OPCode 0x0001
     ISA.createDef( "ADD", "0001 ddd sss 0 00 ttt", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
@@ -20,6 +42,18 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
+
+    ISA.createDef( "MUL", "0001 ddd sss 0 01 ttt", new InstructionDef()
+    {
+      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        final int nzp = registerFile.getRegister( this.getSReg( word ) ) * registerFile.getRegister( this.getTReg( word ) );
+        registerFile.setRegister( this.getDReg( word ), nzp );
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
     ISA.createDef( "SUB", "0001 ddd sss 0 10 ttt", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
@@ -30,6 +64,18 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
+
+    ISA.createDef( "DIV", "0001 ddd sss 0 11 ttt", new InstructionDef()
+    {
+      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        final int nzp = registerFile.getRegister( this.getSReg( word ) ) / registerFile.getRegister( this.getTReg( word ) );
+        registerFile.setRegister( this.getDReg( word ), nzp );
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
     ISA.createDef( "ADD", "0001 ddd sss 1 iiiii", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
@@ -40,7 +86,10 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
-    ISA.createDef( "AND", "0101 ddd sss 0 00 ttt", new InstructionDef()
+
+
+
+    ISA.createDef( "AND", "0101 ddd sss 000 ttt", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
@@ -50,25 +99,106 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
-    ISA.createDef( "AND", "0101 ddd sss 1 iiiii", new InstructionDef()
+
+    ISA.createDef( "NOT", "0101 ddd sss 001 xxx", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
-        final int nzp = registerFile.getRegister( this.getSReg( word ) ) & this.getSignedImmed( word );
+        final int nzp = ~registerFile.getRegister( this.getSReg( word ) );
         registerFile.setRegister( this.getDReg( word ), nzp );
         registerFile.setNZP( nzp );
         return n + 1;
       }
     } );
-    ISA.createDef( "BR", "0000 111 ppppppppp", new BranchDef() );
-    ISA.createDef( "BRnzp", "0000 111 ppppppppp", new BranchDef() );
-    ISA.createDef( "BRp", "0000 001 ppppppppp", new BranchDef() );
-    ISA.createDef( "BRz", "0000 010 ppppppppp", new BranchDef() );
-    ISA.createDef( "BRzp", "0000 011 ppppppppp", new BranchDef() );
-    ISA.createDef( "BRn", "0000 100 ppppppppp", new BranchDef() );
-    ISA.createDef( "BRnp", "0000 101 ppppppppp", new BranchDef() );
-    ISA.createDef( "BRnz", "0000 110 ppppppppp", new BranchDef() );
-    ISA.createDef( "RET", "1100 000 111 000000", new InstructionDef()
+
+    ISA.createDef( "OR", "0101 ddd sss 010 ttt", new InstructionDef()
+    {
+      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        final int nzp = registerFile.getRegister( this.getSReg( word ) ) | registerFile.getRegister( this.getTReg( word ) );
+        registerFile.setRegister( this.getDReg( word ), nzp );
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
+    ISA.createDef( "XOR", "0101 ddd sss 011 ttt", new InstructionDef()
+    {
+      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        final int nzp = registerFile.getRegister( this.getSReg( word ) ) ^ registerFile.getRegister( this.getTReg( word ) );
+        registerFile.setRegister( this.getDReg( word ), nzp );
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
+    ISA.createDef( "AND", "0101 ddd sss 1 uuuuu", new InstructionDef()
+    {
+      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        final int nzp = registerFile.getRegister( this.getSReg( word ) ) & this.getUnsignedImmed( word );
+        registerFile.setRegister( this.getDReg( word ), nzp );
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
+    // Compare instructions: OPCode 0x1001
+    ISA.createDef( "CMP", "1001 sss 00 xxxx ttt", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        final int sValue = registerFile.getRegister( getSReg( word  ) );
+        final int tValue = registerFile.getRegister( getTReg( word  ) );
+        final int nzp = sValue - tValue;
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
+    ISA.createDef( "CMPU", "1001 sss 01 xxxx ttt", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        final int sValue = registerFile.getRegister( getSReg( word ) );
+        final int tValue = registerFile.getRegister( getTReg( word ) );
+        final int nzp = sValue - tValue;
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
+    ISA.createDef( "CMPi", "1001 sss 10 iiiiiii", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        final int sValue = registerFile.getRegister( getSReg( word  ) );
+        final int iValue = getSignedImmed( word );
+        final int nzp = sValue - iValue;
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
+    ISA.createDef( "CMPUi", "1001 sss 11 uuuuuuu", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        final int sValue = registerFile.getRegister( getSReg( word  ) );
+        final int uValue = getUnsignedImmed( word );
+        final int nzp = sValue - uValue;
+        registerFile.setNZP( nzp );
+        return n + 1;
+      }
+    } );
+
+
+    ISA.createDef( "RET",   "1100 000 111 000000", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
@@ -248,28 +378,10 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
-    ISA.createDef( "NOT", "1001 ddd sss 111111", new InstructionDef()
-    {
-      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
-      {
-        final int nzp = ~registerFile.getRegister( this.getSReg( word ) );
-        registerFile.setRegister( this.getDReg( word ), nzp );
-        registerFile.setNZP( nzp );
-        return n + 1;
-      }
-    } );
+
 
     /*
-    ISA.createDef( "MUL", "1101 ddd sss 0 00 ttt", new InstructionDef()
-    {
-      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
-      {
-        final int nzp = registerFile.getRegister( this.getSReg( word ) ) * registerFile.getRegister( this.getTReg( word ) );
-        registerFile.setRegister( this.getDReg( word ), nzp );
-        registerFile.setNZP( nzp );
-        return n + 1;
-      }
-    } );
+
     ISA.createDef( "MUL", "1101 ddd sss 1 iiiii", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
@@ -551,6 +663,56 @@ public class LC3 extends ISA
 
         // That's it.
         return pc + 1;
+      }
+    } );
+
+    ISA.createDef( "MOD", "1101 ddd sss 001 ttt", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        // Get the value in the t register
+        final int tValue = registerFile.getRegister( getTReg( word ) );
+
+        // Get the value in the source register
+        final int sValue = registerFile.getRegister( getSReg( word ) );
+
+        // Compute the result and ...
+        final int result = sValue % tValue;
+
+        // ... store it away
+        registerFile.setRegister( getDReg( word ), result );
+
+        // Update the condition registers
+        registerFile.setNZP( result );
+
+        // That's it
+        return n + 1;
+      }
+    } );
+
+    ISA.createDef( "MODi", "1101 ddd sss 101 uuu", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        // Get the immediate value
+        final int uValue = getUnsignedImmed( word );
+
+        // Get the value in the source register
+        final int sValue = registerFile.getRegister( getSReg( word ) );
+
+        // Compute the result and ...
+        final int result = sValue % uValue;
+
+        // ... store it away
+        registerFile.setRegister( getDReg( word ), result );
+
+        // Update the condition registers
+        registerFile.setNZP( result );
+
+        // That's it
+        return n + 1;
       }
     } );
 
