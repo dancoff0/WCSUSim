@@ -642,6 +642,7 @@ public class GUI implements ActionListener, TableModelListener
             catch( AsException ex )
             {
               Console.println( ex.getMessage() + "\nErrors encountered during assembly." );
+              return;
             }
             Console.println( "Assembly of '" + asmFile.getName() + "' completed without errors or warnings.");
           }
