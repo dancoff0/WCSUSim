@@ -712,8 +712,7 @@ TRAP_DRAW_RECT
 	ST R5, VIDEO_SAVE_R5
 	ST R6, VIDEO_SAVE_R6
 	
-	;; Sanity check: Make sure that
-	;; the values in R2 and R3 are > 0
+	;; Sanity check: Make sure that the values in R2 and R3 are > 0
 	CMPi	  R2, #0
 	BRnz	  TRAP_DRAW_RECT_END
 	CMPi	  R3, #0
