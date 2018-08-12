@@ -44,7 +44,6 @@ public class LC3 extends ISA
       }
     } );
 
-
     // Arithmetic instructions: OPCode 0x0001
     ISA.createDef( "ADD", "0001 ddd sss 0 00 ttt", new InstructionDef()
     {
@@ -101,7 +100,16 @@ public class LC3 extends ISA
       }
     } );
 
-
+    ISA.createDef( "CLR", "0101 ddd xxx 1 00000", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int pc, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        registerFile.setRegister( this. getDReg( word), 0 );
+        registerFile.setNZP( 0 );
+        return pc + 1;
+      }
+    } );
 
     ISA.createDef( "AND", "0101 ddd sss 000 ttt", new InstructionDef()
     {
