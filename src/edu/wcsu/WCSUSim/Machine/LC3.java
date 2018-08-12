@@ -31,6 +31,20 @@ public class LC3 extends ISA
       }
     } );
 
+    // Synonym for the common pattern of copying the value of one register to another
+    ISA.createDef( "CPR", "0001 ddd sss 1 00000", new InstructionDef()
+    {
+      @Override
+      public int execute( Word word, int pc, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        final int sValue = registerFile.getRegister( getSReg( word ) );
+        registerFile.setRegister( getDReg( word ), sValue );
+        return pc + 1;
+
+      }
+    } );
+
+
     // Arithmetic instructions: OPCode 0x0001
     ISA.createDef( "ADD", "0001 ddd sss 0 00 ttt", new InstructionDef()
     {
@@ -224,7 +238,7 @@ public class LC3 extends ISA
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
-        registerFile.setPrivMode( false );
+        registerFile.setPrivMode( false );  // DMC: Is this a bug?
         return registerFile.getRegister( this.getDReg( word ) );
       }
     } );
@@ -255,7 +269,7 @@ public class LC3 extends ISA
         return register;
       }
     } );
-    ISA.createDef( "LD", "0010 ddd ppppppppp", new InstructionDef()
+    ISA.createDef( "LD", "0010 ddd 0 pppppppp", new InstructionDef()
     {
       public boolean isLoad()
       {
@@ -275,7 +289,20 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
-    ISA.createDef( "LDI", "1010 ddd ppppppppp", new InstructionDef()
+
+    // Load a register with an immediate value
+    ISA.createDef( "LC", "1010 ddd iiiiiiiii", new InstructionDef()
+    {
+      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException
+      {
+        final int value = getSignedImmed( word );
+        registerFile.setRegister( this.getDReg( word ), value );
+        registerFile.setNZP( value );
+        return n + 1;
+      }
+    } );
+
+    ISA.createDef( "LDI", "0010 ddd 1 pppppppp", new InstructionDef()
     {
       public boolean isLoad()
       {
@@ -324,7 +351,7 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
-    ISA.createDef( "ST", "0011 ddd ppppppppp", new InstructionDef()
+    ISA.createDef( "ST", "0011 ddd 0 pppppppp", new InstructionDef()
     {
       public boolean isStore()
       {
@@ -342,7 +369,8 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
-    ISA.createDef( "STI", "1011 ddd ppppppppp", new InstructionDef()
+
+    ISA.createDef( "STI", "0011 ddd 1 pppppppp", new InstructionDef()
     {
       public boolean isStore()
       {
@@ -360,6 +388,7 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
+
     ISA.createDef( "STR", "0111 ddd sss iiiiii", new InstructionDef()
     {
       public boolean isStore()
@@ -378,22 +407,6 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
-
-
-    /*
-
-    ISA.createDef( "MUL", "1101 ddd sss 1 iiiii", new InstructionDef()
-    {
-      public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
-      {
-        final int nzp = registerFile.getRegister( this.getSReg( word ) ) * this.getSignedImmed( word );
-        registerFile.setRegister( this.getDReg( word ), nzp );
-        registerFile.setNZP( nzp );
-        return n + 1;
-      }
-    } );
-
-    */
 
     // Implement shifts:
     // Shift Left
@@ -731,13 +744,13 @@ public class LC3 extends ISA
         throw new IllegalInstructionException( "RTI can only be executed in privileged mode" );
       }
     } );
-    ISA.createDef( "GETC", "1111 0000 00100000", new TrapDef() );
-    ISA.createDef( "OUT", "1111 0000 00100001", new TrapDef() );
-    ISA.createDef( "PUTS", "1111 0000 00100010", new TrapDef() );
-    ISA.createDef( "IN", "1111 0000 00100011", new TrapDef() );
+    ISA.createDef( "GETC",  "1111 0000 00100000", new TrapDef() );
+    ISA.createDef( "OUT",   "1111 0000 00100001", new TrapDef() );
+    ISA.createDef( "PUTS",  "1111 0000 00100010", new TrapDef() );
+    ISA.createDef( "IN",    "1111 0000 00100011", new TrapDef() );
     ISA.createDef( "PUTSP", "1111 0000 00100100", new TrapDef() );
-    ISA.createDef( "HALT", "1111 0000 00100101", new TrapDef() );
-    ISA.createDef( "TRAP", "1111 0000 uuuuuuuu", new TrapDef() );
+    ISA.createDef( "HALT",  "1111 0000 00100101", new TrapDef() );
+    ISA.createDef( "TRAP",  "1111 0000 uuuuuuuu", new TrapDef() );
   }
 
   private class BranchDef extends InstructionDef
