@@ -304,6 +304,8 @@ public abstract class InstructionDef
         throw new AsException( instruction, "PC-relative offset out of range" );
       }
     }
+    // Mark this data
+    list.add( ISA.DATA_MARKER );
     list.add( word );
   }
 

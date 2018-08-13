@@ -258,6 +258,8 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
+
+    /*
     ISA.createDef( "MUL", "1101 ddd sss 0 00 ttt", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
@@ -278,6 +280,272 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
+
+    */
+
+    // Implement shifts:
+    // Shift Left
+    //     Logical Shift left with bit count in a register
+    ISA.createDef( "SHFl", "1101 ddd sss 0 0 0 ttt", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        // Get the number of bits to shift
+        int TReg = getTReg( word );
+        System.out.println( "TReg = " + TReg );
+        int bitsToShift = registerFile.getRegister( getTReg( word ) );
+
+        // Constrain this to a maximum value of 15.
+        bitsToShift = Math.min( Math.abs( bitsToShift ), 16 );
+
+        // Sanity check: if the number of bits to shift is zero, we are already done.
+        if( bitsToShift == 0 )
+        {
+          return pc + 1;
+        }
+
+        // Get the source value
+        int sourceValue = registerFile.getRegister( getSReg( word ) );
+
+        // Shift it as appropriate
+        if( bitsToShift == 1 )
+        {
+          // Check if the left-most bit is zero or one.
+          int cValue = (sourceValue & 0x8000) == 0 ? 0x0000 : 0x0001;
+
+          // Set the C bit
+          registerFile.setC( cValue );
+        }
+
+        // Compute the shifted value.
+        int shiftedValue = ( sourceValue << bitsToShift ) & 0xFFFF;
+
+        // Set the NZ and P values.
+        registerFile.setNZP( shiftedValue );
+
+        // Store away the shifted value.
+        registerFile.setRegister( getDReg( word ), shiftedValue );
+
+        // That's it.
+        return pc + 1;
+      }
+
+    } );
+
+    //     Logical Shift left with an immediate bit count
+    ISA.createDef( "SHFli", "1101 ddd sss 1 0 0 iii", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        // Get the number of bits to shift
+        int bitsToShift = getUnsignedImmed( word );
+
+        // Sanity check: if the number of bits to shift is zero, we are already done.
+        if( bitsToShift == 0 )
+        {
+          return pc + 1;
+        }
+
+        // Get the source value
+        int sourceValue = registerFile.getRegister( getSReg( word ) );
+
+        // Shift it as appropriate
+        if( bitsToShift == 1 )
+        {
+          // Check if the left-most bit is zero or one.
+          int cValue = (sourceValue & 0x8000) == 0 ? 0x0000 : 0x0001;
+
+          // Set the C bit
+          registerFile.setC( cValue );
+        }
+
+        // Compute the shifted value.
+        int shiftedValue = ( sourceValue << bitsToShift ) & 0xFFFF;
+
+        // Set the NZ and P values.
+        registerFile.setNZP( shiftedValue );
+
+        // Store away the shifted value.
+        registerFile.setRegister( getDReg( word ), shiftedValue );
+
+        // That's it.
+        return pc + 1;
+      }
+    } );
+
+    // Right Shifts
+    //     Logical Shift right with bit count in a register
+    ISA.createDef( "SHFr", "1101 ddd sss 0 1 0 ttt", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        // Get the number of bits to shift
+        int bitsToShift = registerFile.getRegister( getTReg( word ) );
+
+        // Constrain this to a maximum value of 15.
+        bitsToShift = Math.min( Math.abs( bitsToShift ), 16 );
+
+        // Sanity check: if the number of bits to shift is zero, we are already done.
+        if( bitsToShift == 0 )
+        {
+          return pc + 1;
+        }
+
+        // Get the source value
+        int sourceValue = registerFile.getRegister( getSReg( word ) );
+
+        // Shift it as appropriate
+        if( bitsToShift == 1 )
+        {
+          // Check if the right-most bit is zero or one.
+          int cValue = (sourceValue & 0x0001) == 0 ? 0x0000 : 0x0001;
+
+          // Set the C bit
+          registerFile.setC( cValue );
+        }
+
+        // Compute the shifted value.
+        int shiftedValue = ( sourceValue >> bitsToShift ) & 0xFFFF;
+
+        // Set the NZ and P values.
+        registerFile.setNZP( shiftedValue );
+
+        // Store away the shifted value.
+        registerFile.setRegister( getDReg( word ), shiftedValue );
+
+        // That's it.
+        return pc + 1;
+      }
+
+    } );
+
+    //     Logical Shift right with an immediate bit count
+    ISA.createDef( "SHFri", "1101 ddd sss 1 1 0 iii", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        // Get the number of bits to shift
+        int bitsToShift = getUnsignedImmed( word );
+
+        // Sanity check: if the number of bits to shift is zero, we are already done.
+        if( bitsToShift == 0 )
+        {
+          return pc + 1;
+        }
+
+        // Get the source value
+        int sourceValue = registerFile.getRegister( getSReg( word ) );
+
+        // Shift it as appropriate
+        if( bitsToShift == 1 )
+        {
+          // Check if the right-most bit is zero or one.
+          int cValue = (sourceValue & 0x0001) == 0 ? 0x0000 : 0x0001;
+
+          // Set the C bit
+          registerFile.setC( cValue );
+        }
+
+        // Compute the shifted value.
+        int shiftedValue = ( sourceValue >> bitsToShift ) & 0xFFFF;
+
+        // Set the NZ and P values.
+        registerFile.setNZP( shiftedValue );
+
+        // Store away the shifted value.
+        registerFile.setRegister( getDReg( word ), shiftedValue );
+
+        // That's it.
+        return pc + 1;
+      }
+    } );
+
+    //     Arithmetic Shift right with bit count in a register
+    ISA.createDef( "SHFar", "1101 ddd sss 0 1 1 ttt", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        // Get the number of bits to shift
+        int bitsToShift = registerFile.getRegister( getTReg( word ) );
+
+        // Constrain this to a maximum value of 15.
+        bitsToShift = Math.min( Math.abs( bitsToShift ), 16 );
+
+        // Sanity check: if the number of bits to shift is zero, we are already done.
+        if( bitsToShift == 0 )
+        {
+          return pc + 1;
+        }
+
+        // Get the source value
+        int sourceValue = registerFile.getRegister( getSReg( word ) );
+
+        // Shift it as appropriate
+        if( bitsToShift == 1 )
+        {
+          // Check if the right-most bit is zero or one.
+          int cValue = (sourceValue & 0x0001) == 0 ? 0x0000 : 0x0001;
+
+          // Set the C bit
+          registerFile.setC( cValue );
+        }
+
+        // Compute the shifted value.
+        int shiftedValue = ( sourceValue >>> bitsToShift ) & 0xFFFF;
+
+        // Set the NZ and P values.
+        registerFile.setNZP( shiftedValue );
+
+        // Store away the shifted value.
+        registerFile.setRegister( getDReg( word ), shiftedValue );
+
+        // That's it.
+        return pc + 1;
+      }
+
+    } );
+
+    //     Logical Shift right with an immediate bit count
+    ISA.createDef( "SHFari", "1101 ddd sss 1 1 1 iii", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        // Get the number of bits to shift
+        int bitsToShift = getUnsignedImmed( word );
+
+        // Sanity check: if the number of bits to shift is zero, we are already done.
+        if( bitsToShift == 0 )
+        {
+          return pc + 1;
+        }
+
+        // Get the source value
+        int sourceValue = registerFile.getRegister( getSReg( word ) );
+
+        // Shift it as appropriate
+        if( bitsToShift == 1 )
+        {
+          // Check if the right-most bit is zero or one.
+          int cValue = (sourceValue & 0x0001) == 0 ? 0x0000 : 0x0001;
+
+          // Set the C bit
+          registerFile.setC( cValue );
+        }
+
+        // Compute the shifted value.
+        int shiftedValue = ( sourceValue >>> bitsToShift ) & 0xFFFF;
+
+        // Set the NZ and P values.
+        registerFile.setNZP( shiftedValue );
+
+        // Store away the shifted value.
+        registerFile.setRegister( getDReg( word ), shiftedValue );
+
+        // That's it.
+        return pc + 1;
+      }
+    } );
+
     ISA.createDef( "RTI", "1000 000000000000", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalInstructionException

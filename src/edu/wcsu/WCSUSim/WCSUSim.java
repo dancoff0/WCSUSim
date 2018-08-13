@@ -43,11 +43,11 @@ public class WCSUSim
     {
         if ( WCSUSim.LC3)
         {
-            return "edu.wcsu.WCSUSim.Machine.LC3 edu.wcsu.WCSUSim.edu.wcsu.WCSUSim.Machine.Machine.ISA";
+            return "LC3 ISA";
         }
         if ( WCSUSim.P37X)
         {
-            return "edu.wcsu.WCSUSim.Machine.P37X edu.wcsu.WCSUSim.edu.wcsu.WCSUSim.Machine.Machine.ISA";
+            return "P37X ISA";
         }
         return null;
     }

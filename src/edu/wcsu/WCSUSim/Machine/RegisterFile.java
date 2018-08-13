@@ -6,31 +6,32 @@ import edu.wcsu.WCSUSim.WCSUSim;
 
 import javax.swing.table.AbstractTableModel;
 
-// 
-// Decompiled by Procyon v0.5.30
-// 
-
+// This class implements the Register File for the LC3 computer
 public class RegisterFile extends AbstractTableModel
 {
   /**
    * Generated SerialID
    */
   private static final long serialVersionUID = 7358978233955494345L;
-  public static final int NUM_REGISTERS = 8;
-  private final String[] colNames;
-  private final Machine machine;
-  private final Word PC;
-  private final Word MPR;
-  private final Word PSR;
-  private final Word MCR;
-  private final Word[] regArr;
-  private static String[] indNames;
-  private static int[] indRow;
-  private static int[] indCol;
-  private boolean dirty;
-  private int mostRecentlyWrittenValue;
 
-  public RegisterFile( final Machine machine )
+  // Constants
+  public static final int NUM_REGISTERS = 8;
+
+  // Instance variables
+  private final String[]  colNames;
+  private final Machine   machine;
+  private final Word      PC;
+  private final Word      MPR;
+  private final Word      PSR;
+  private final Word      MCR;
+  private final Word[]    regArr;
+  private static String[] indNames;
+  private static int[]    indRow;
+  private static int[]    indCol;
+  private boolean dirty;
+  private int             mostRecentlyWrittenValue;
+
+  RegisterFile( final Machine machine )
   {
     this.colNames = new String[]{ "Register", "Value", "Register", "Value" };
     this.regArr = new Word[8];
@@ -43,7 +44,7 @@ public class RegisterFile extends AbstractTableModel
     {
       this.regArr[i] = new Word();
     }
-    this.PC = new Word();
+    this.PC  = new Word();
     this.MPR = new Word();
     this.MCR = new Word();
     this.PSR = new Word();
@@ -56,6 +57,8 @@ public class RegisterFile extends AbstractTableModel
     {
       this.regArr[i].setValue( 0 );
     }
+
+    // Set the initial values
     this.PC.setValue( 512 );
     this.MPR.setValue( 0 );
     this.MCR.setValue( 32768 );
@@ -174,14 +177,14 @@ public class RegisterFile extends AbstractTableModel
     this.fireTableCellUpdated( n, n2 );
   }
 
-  public boolean isDirty()
+  boolean isDirty()
   {
     final boolean dirty = this.dirty;
     this.dirty = false;
     return dirty;
   }
 
-  public int getMostRecentlyWrittenValue()
+  int getMostRecentlyWrittenValue()
   {
     return this.mostRecentlyWrittenValue;
   }
@@ -223,16 +226,16 @@ public class RegisterFile extends AbstractTableModel
     return this.regArr[n].getValue();
   }
 
-  public void setRegister( final int n, final int n2 )
+  public void setRegister( final int index, final int value )
   {
-    if( n < 0 || n >= 8 )
+    if( index < 0 || index >= 8 )
     {
       throw new IndexOutOfBoundsException( "Register index must be from 0 to 7" );
     }
     this.dirty = true;
-    this.mostRecentlyWrittenValue = n2;
-    this.regArr[n].setValue( n2 );
-    this.fireTableCellUpdated( RegisterFile.indRow[n], RegisterFile.indCol[n] );
+    this.mostRecentlyWrittenValue = value;
+    this.regArr[index].setValue( value );
+    this.fireTableCellUpdated( RegisterFile.indRow[index], RegisterFile.indCol[index] );
   }
 
   public boolean getN()
@@ -250,12 +253,18 @@ public class RegisterFile extends AbstractTableModel
     return this.PSR.getBit( 0 ) == 1;
   }
 
-  public boolean getPrivMode()
+  // Get the carry register
+  public boolean getC()
+  {
+    return PSR.getBit( 3 ) == 1;
+  }
+
+  boolean getPrivMode()
   {
     return this.PSR.getBit( 15 ) == 1;
   }
 
-  public void checkAddr( final int n ) throws IllegalMemAccessException
+  void checkAddr( final int n ) throws IllegalMemAccessException
   {
     final boolean privMode = this.getPrivMode();
     if( n < 0 || n >= 65536 )
@@ -283,19 +292,33 @@ public class RegisterFile extends AbstractTableModel
     {
       return "invalid";
     }
+
+    // Get the NZP values.
+    String ccValue = "";
     if( this.getN() )
     {
-      return "N";
+      ccValue = "N";
     }
-    if( this.getZ() )
+    else if( this.getZ() )
     {
-      return "Z";
+      ccValue = "Z";
     }
-    if( this.getP() )
+    else if( this.getP() )
     {
-      return "P";
+      ccValue =  "P";
     }
-    return "unset";
+    else
+    {
+      ccValue = "unset";
+    }
+
+    // Now add the 'C' value
+    if( getC() )
+    {
+      ccValue += "C";
+    }
+
+    return ccValue;
   }
 
   public int getPSR()
@@ -303,39 +326,50 @@ public class RegisterFile extends AbstractTableModel
     return this.PSR.getValue();
   }
 
-  public void setNZP( int n )
+  void setNZP( int newValue )
   {
-    final int n2 = this.PSR.getValue() & 0xFFFFFFF8;
-    n &= 0xFFFF;
+    // Get the last three bits of the Processor Status Register (PSR)
+    final int currentNZP = this.PSR.getValue() & 0xFFFFFFF8;
+
+    // Mask off the upper bits of the new value
+    newValue &= 0xFFFF;
+
     int psr;
-    if( (n & 0x8000) != 0x0 )
+    // Check the sign bit
+    if( (newValue & 0x8000) != 0x0 )
     {
-      psr = (n2 | 0x4);
+      // If the sign bit is set, the value is negative
+      psr = (currentNZP | 0x4);
     }
-    else if( n == 0 )
+    else if( newValue == 0 )
     {
-      psr = (n2 | 0x2);
+      // The value is zero
+      psr = (currentNZP | 0x2);
     }
     else
     {
-      psr = (n2 | 0x1);
+      // If not negative, or zero, it must be positive
+      psr = (currentNZP | 0x1);
     }
+
+    // Store away the new value.
     this.setPSR( psr );
   }
 
-  public void setNZP( String trim )
+  private void setNZP( String newStringValue )
   {
-    trim = trim.toLowerCase().trim();
-    if( !trim.equals( "n" ) && !trim.equals( "z" ) && !trim.equals( "p" ) )
+    newStringValue = newStringValue.toLowerCase().trim();
+
+    if( !newStringValue.equals( "n" ) && !newStringValue.equals( "z" ) && !newStringValue.equals( "p" ) )
     {
-      Console.println( "Condition codes must be set as one of `n', `z' or `p'" );
+      Console.println( "Condition codes must be set as one of 'n', 'z' or 'p'" );
       return;
     }
-    if( trim.equals( "n" ) )
+    if( newStringValue.equals( "n" ) )
     {
       this.setN();
     }
-    else if( trim.equals( "z" ) )
+    else if( newStringValue.equals( "z" ) )
     {
       this.setZ();
     }
@@ -360,7 +394,30 @@ public class RegisterFile extends AbstractTableModel
     this.setNZP( 1 );
   }
 
-  public void setPrivMode( final boolean b )
+  // Set the value of the carry register
+  public void setC( int newValue )
+  {
+    // Get the current value in the PSR.
+    int currentPSR = PSR.getValue() & 0xFFFF;
+
+    int newPSR;
+    if( newValue == 0 )
+    {
+      // If the newValue is zero, clear bit 3 of the PSR
+      newPSR = currentPSR & 0xFFF7;
+    }
+    else
+    {
+      newPSR = currentPSR | 0x0008;
+    }
+
+    // Store away the new value
+    setPSR( newPSR );
+  }
+
+
+  //Set the current privilege level
+  void setPrivMode( final boolean b )
   {
     final int value = this.PSR.getValue();
     int psr;
@@ -375,7 +432,7 @@ public class RegisterFile extends AbstractTableModel
     this.setPSR( psr );
   }
 
-  public void setClockMCR( final boolean b )
+  void setClockMCR( final boolean b )
   {
     if( b )
     {
@@ -387,17 +444,17 @@ public class RegisterFile extends AbstractTableModel
     }
   }
 
-  public boolean getClockMCR()
+  boolean getClockMCR()
   {
     return (this.getMCR() & 0x8000) != 0x0;
   }
 
-  public void setMCR( final int value )
+  void setMCR( final int value )
   {
     this.MCR.setValue( value );
   }
 
-  public int getMCR()
+  int getMCR()
   {
     return this.MCR.getValue();
   }
@@ -414,7 +471,7 @@ public class RegisterFile extends AbstractTableModel
     return this.MPR.getValue();
   }
 
-  public void setMPR( final int value )
+  void setMPR( final int value )
   {
     this.MPR.setValue( value );
     this.fireTableCellUpdated( RegisterFile.indRow[9], RegisterFile.indCol[9] );
