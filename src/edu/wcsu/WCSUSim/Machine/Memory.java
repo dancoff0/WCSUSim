@@ -23,25 +23,44 @@ public class Memory extends AbstractTableModel
   private String[] colNames;
   private boolean[] nextBreakPoints;
   private boolean[] breakPoints;
+
+  // Built-in devices
   private KeyboardDevice kbDevice;
   private MonitorDevice monitorDevice;
   private TimerDevice timerDevice;
-  public static final int BEGIN_DEVICE_REGISTERS = 65024;
-  public static final int KBSR = 65024;
-  public static final int KBDR = 65026;
-  public static final int DSR = 65028;
-  public static final int DDR = 65030;
-  public static final int TMR = 65032;
-  public static final int TMI = 65034;
+
+  // Device registers
+  public static final int BEGIN_DEVICE_REGISTERS = 0xFE00;
+  public static final int OS_KBSR = 0xFE00;
+  public static final int OS_KBDR = 0xFE02;
+  public static final int OS_DSR = 0xFE04;
+  public static final int OS_DDR = 0xFE06;
+  public static final int OS_TMR = 0xFE08;
+  public static final int OS_TMI = 0xFE0A;
+
+  // Control registers
+  public static final int OS_MPR = 0xFE12;
+  public static final int OS_MCR = 0xFFFE;
+
   public static final int DISABLE_TIMER = 0;
   public static final int MANUAL_TIMER_MODE = 1;
-  public static final int MPR = 65042;
-  public static final int MCR = 65534;
+
   public static final int BREAKPOINT_COLUMN = 0;
   public static final int ADDRESS_COLUMN = 1;
   public static final int VALUE_COLUMN = 2;
   public static final int INSN_COLUMN = 3;
+
+  // This is a reference to the actual machine
   private final Machine machine;
+
+  // Writing this value to the DDR causes it to be cleared.
+  private static final int ERASE_MONITOR = 0x8000;
+
+  // This bit being set in the MCR indicates that interrupts are enabled.
+  public static final int ENABLE_INTERRUPTS_BIT = 0x4000;
+
+  // This interrupt vector corresponds to the keyboard
+  private static final int KEYBOARD_INT_VECTOR = 0x0007;
 
   public Memory( final Machine machine )
   {
@@ -49,7 +68,7 @@ public class Memory extends AbstractTableModel
     this.colNames = new String[]{ "BP", "Address", "Value", "Instruction" };
     this.nextBreakPoints = new boolean[65536];
     this.breakPoints = new boolean[65536];
-    this.kbDevice = new KeyboardDevice();
+    this.kbDevice = new KeyboardDevice( this );
     this.monitorDevice = new MonitorDevice();
     this.timerDevice = new TimerDevice();
     this.machine = machine;
@@ -59,6 +78,11 @@ public class Memory extends AbstractTableModel
       this.breakPoints[i] = false;
     }
     this.timerDevice.setTimer();
+  }
+
+  public Machine getMachine()
+  {
+    return machine;
   }
 
   public KeyboardDevice getKeyBoardDevice()
@@ -77,7 +101,7 @@ public class Memory extends AbstractTableModel
     {
       this.memArr[i].reset();
     }
-    this.kbDevice.reset();
+    //this.kbDevice.reset();  DMC no longer needed
     this.monitorDevice.reset();
     this.timerDevice.reset();
     this.clearAllBreakPoints();
@@ -99,9 +123,9 @@ public class Memory extends AbstractTableModel
     return this.colNames[n];
   }
 
-  public boolean isCellEditable( final int n, final int n2 )
+  public boolean isCellEditable( final int memoryLocation, final int n2 )
   {
-    return (n2 == 2 || n2 == 0) && n < 65024;
+    return (n2 == 2 || n2 == 0) && memoryLocation < BEGIN_DEVICE_REGISTERS;
   }
 
   public boolean isBreakPointSet( final int n )
@@ -196,20 +220,20 @@ public class Memory extends AbstractTableModel
     this.nextBreakPoints[n] = false;
   }
 
-  public Object getValueAt( final int n, final int n2 )
+  public Object getValueAt( final int memoryLocation, final int n2 )
   {
     Object o = null;
     switch( n2 )
     {
       case 0:
       {
-        o = new Boolean( this.isBreakPointSet( n ) );
+        o = new Boolean( this.isBreakPointSet( memoryLocation ) );
         break;
       }
       case 1:
       {
-        o = Word.toHex( n );
-        final String lookupSym = this.machine.lookupSym( n );
+        o = Word.toHex( memoryLocation );
+        final String lookupSym = this.machine.lookupSym( memoryLocation );
         if( lookupSym != null )
         {
           o = o + " " + lookupSym;
@@ -219,9 +243,9 @@ public class Memory extends AbstractTableModel
       }
       case 2:
       {
-        if( n < 65024 )
+        if( memoryLocation < BEGIN_DEVICE_REGISTERS )
         {
-          o = this.memArr[n].toHex();
+          o = this.memArr[memoryLocation].toHex();
           break;
         }
         o = "???";
@@ -229,9 +253,9 @@ public class Memory extends AbstractTableModel
       }
       case 3:
       {
-        if( n < 65024 )
+        if( memoryLocation < BEGIN_DEVICE_REGISTERS )
         {
-          o = ISA.disassemble( this.memArr[n], n, this.machine );
+          o = ISA.disassemble( this.memArr[memoryLocation], memoryLocation, this.machine );
           break;
         }
         o = "Use 'list' to query";
@@ -252,53 +276,55 @@ public class Memory extends AbstractTableModel
     return this.read( n );
   }
 
-  public Word read( final int n )
+  public Word read( final int address )
   {
     Word word = null;
-    switch( n )
+    switch( address )
     {
-      case 65024:
+      /*
+      case OS_KBSR:  // OS_KBSR
       {
         word = this.kbDevice.status();
         break;
       }
-      case 65026:
+      case OS_KBDR:  // OS_KBDR
       {
         word = this.kbDevice.read();
         break;
       }
-      case 65028:
+      */
+      case OS_DSR: // OS_DSR
       {
         word = this.monitorDevice.status();
         break;
       }
-      case 65032:
+      case OS_TMR:
       {
         word = this.timerDevice.status();
         break;
       }
-      case 65034:
+      case OS_TMI:
       {
         word = new Word( (int) this.timerDevice.getInterval() );
         break;
       }
-      case 65042:
+      case OS_MPR:  // Memory Protection Register
       {
         word = new Word( this.machine.getRegisterFile().getMPR() );
         break;
       }
-      case 65534:
+      case OS_MCR:  // Machine Control Register
       {
         word = new Word( this.machine.getRegisterFile().getMCR() );
         break;
       }
       default:
       {
-        if( n < 0 || n >= 65536 )
+        if( address < 0 || address >= 65536 )
         {
           return null;
         }
-        word = this.memArr[n];
+        word = this.memArr[address];
         break;
       }
     }
@@ -328,23 +354,39 @@ public class Memory extends AbstractTableModel
     }
   }
 
-  public void checkAndWrite( final int n, final int n2 ) throws IllegalMemAccessException
+  public void checkAndWrite( final int address, final int value ) throws IllegalMemAccessException
   {
-    this.machine.getRegisterFile().checkAddr( n );
-    this.write( n, n2 );
+    this.machine.getRegisterFile().checkAddr( address );
+    this.write( address, value );
   }
 
-  public void write( final int n, final int value )
+  public void write( final int address, final int value )
   {
-    switch( n )
+    switch( address )
     {
-      case 65030:
+      case OS_DDR:
       {
-        this.monitorDevice.write( (char) value );
-        this.fireTableCellUpdated( n, 3 );
+        if( value == ERASE_MONITOR )
+        {
+          monitorDevice.reset();
+        }
+        else
+        {
+          this.monitorDevice.write( (char) value );
+        }
+        this.fireTableCellUpdated( address, 3 );
         break;
       }
-      case 65034:
+
+      case OS_KBSR:
+      {
+        this.memArr[address].setValue( value );
+
+        // Alert the keyboard device that its status register has just been changed
+        this.kbDevice.statusRegisterUpdated();
+        return;
+      }
+      case OS_TMI:
       {
         this.timerDevice.setTimer( value );
         if( value == 0 )
@@ -360,12 +402,12 @@ public class Memory extends AbstractTableModel
         }
         break;
       }
-      case 65042:
+      case OS_MPR:
       {
         this.machine.getRegisterFile().setMPR( value );
         break;
       }
-      case 65534:
+      case OS_MCR:
       {
         this.machine.getRegisterFile().setMCR( value );
         if( (value & 0x8000) == 0x0 )
@@ -373,11 +415,20 @@ public class Memory extends AbstractTableModel
           this.machine.stopExecution( 1, true );
           break;
         }
+
+        // Check if interrupts are now enabled
+        if( (value & ENABLE_INTERRUPTS_BIT) != 0 )
+        {
+          // Propagate this to the keyboard, and potentially other devices
+          int currentKSR = memArr[ OS_KBSR ].getValue();
+          int newKSR = currentKSR | ENABLE_INTERRUPTS_BIT | KEYBOARD_INT_VECTOR;
+          memArr[ OS_KBSR ] = new Word( newKSR );
+        }
         this.machine.updateStatusLabel();
         break;
       }
     }
-    this.memArr[n].setValue( value );
-    this.fireTableCellUpdated( n, 3 );
+    this.memArr[address].setValue( value );
+    this.fireTableCellUpdated( address, 3 );
   }
 }

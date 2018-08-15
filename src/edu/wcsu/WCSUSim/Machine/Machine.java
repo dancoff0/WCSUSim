@@ -116,6 +116,19 @@ public class Machine implements Runnable
     }
   }
 
+
+  public void signalInterrupt( final int interruptVector )
+  {
+    // Sanity check
+    if( ( registers.getMCR() & Memory.ENABLE_INTERRUPTS_BIT ) == 0 )
+    {
+      System.out.println( "Machine: signalInterrupt: caught interrupt signal, but interrupts are currently disabled" );
+      return;
+    }
+
+    System.out.println( "Machine: signalInterrupt: preparing interrupt for vector " + interruptVector );
+  }
+
   public Memory getMemory()
   {
     return this.memory;

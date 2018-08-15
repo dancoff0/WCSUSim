@@ -227,6 +227,7 @@ public class LC3 extends ISA
         return registerFile.getRegister( 7 );
       }
     } );
+
     ISA.createDef( "JMP", "1100 000 ddd 000000", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
@@ -234,22 +235,26 @@ public class LC3 extends ISA
         return registerFile.getRegister( this.getDReg( word ) );
       }
     } );
+
     ISA.createDef( "RTT", "1100 000 111 000001", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
-        registerFile.setPrivMode( false );
+        //System.out.println( "RTT: popping privilege bit at pc = " + n );
+        registerFile.setPrivMode( registerFile.popPrivMode() );
         return registerFile.getRegister( 7 );
       }
     } );
-    ISA.createDef( "JMPT", "1100 000 ddd 000001", new InstructionDef()
+
+    ISA.createDef( "JMPT", "1100 000 ddd 000010", new InstructionDef()
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
-        registerFile.setPrivMode( false );  // DMC: Is this a bug?
+        registerFile.setPrivMode( false );
         return registerFile.getRegister( this.getDReg( word ) );
       }
     } );
+
     ISA.createDef( "JSR", "0100 1 ppppppppppp", new InstructionDef()
     {
       public boolean isCall()
@@ -752,13 +757,17 @@ public class LC3 extends ISA
         throw new IllegalInstructionException( "RTI can only be executed in privileged mode" );
       }
     } );
-    ISA.createDef( "GETC",  "1111 0000 00100000", new TrapDef() );
-    ISA.createDef( "OUT",   "1111 0000 00100001", new TrapDef() );
-    ISA.createDef( "PUTS",  "1111 0000 00100010", new TrapDef() );
-    ISA.createDef( "IN",    "1111 0000 00100011", new TrapDef() );
-    ISA.createDef( "PUTSP", "1111 0000 00100100", new TrapDef() );
-    ISA.createDef( "HALT",  "1111 0000 00100101", new TrapDef() );
-    ISA.createDef( "TRAP",  "1111 0000 uuuuuuuu", new TrapDef() );
+    ISA.createDef( "GETC",          "1111 0000 00100000", new TrapDef() );
+    ISA.createDef( "OUT",           "1111 0000 00100001", new TrapDef() );
+    ISA.createDef( "PUTS",          "1111 0000 00100010", new TrapDef() );
+    ISA.createDef( "IN",            "1111 0000 00100011", new TrapDef() );
+    ISA.createDef( "PUTSP",         "1111 0000 00100100", new TrapDef() );
+    ISA.createDef( "HALT",          "1111 0000 00100101", new TrapDef() );
+    ISA.createDef( "CLEAR_CONSOLE", "1111 0000 00100110", new TrapDef() );
+    ISA.createDef( "DRAW_RECT",     "1111 0000 00110000", new TrapDef() );
+    ISA.createDef( "DRAW_LINE",     "1111 0000 00110001", new TrapDef() );
+    ISA.createDef( "TRAP",          "1111 0000 uuuuuuuu", new TrapDef() );
+
   }
 
   private class BranchDef extends InstructionDef
@@ -787,8 +796,10 @@ public class LC3 extends ISA
 
     public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
     {
+      registerFile.pushPrivMode();
       registerFile.setPrivMode( true );
       registerFile.setRegister( 7, n + 1 );
+      //System.out.println( "Pushed privilege mode for " + word.getZext( 8, 0 ) );
       return memory.read( word.getZext( 8, 0 ) ).getValue();
     }
   }

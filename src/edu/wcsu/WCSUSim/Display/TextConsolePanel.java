@@ -97,8 +97,12 @@ public class TextConsolePanel extends JPanel implements KeyListener, FocusListen
     final char keyChar = keyEvent.getKeyChar();
     try
     {
+      // Write the character to the keyboard pipe stream.
       this.kbout.write( keyChar );
       this.kbout.flush();
+
+      // Notify the Keyboard device that a key has been pressed.
+      kbd.handleKeyPressed();
     }
     catch( IOException ex )
     {

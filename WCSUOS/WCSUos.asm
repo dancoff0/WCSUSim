@@ -39,7 +39,7 @@
 	.FILL TRAP_IN	; x23
 	.FILL TRAP_PUTSP ; x24        
 	.FILL TRAP_HALT	; x25
-	.FILL BAD_TRAP	; x26
+	.FILL TRAP_CLEAR_CONSOLE ; x26
 	.FILL BAD_TRAP	; x27
 	.FILL BAD_TRAP	; x28
 	.FILL BAD_TRAP	; x29
@@ -50,7 +50,7 @@
 	.FILL BAD_TRAP	; x2E
 	.FILL BAD_TRAP	; x2F
 	.FILL TRAP_DRAW_RECT	; x30
-	.FILL BAD_TRAP	; x31
+	.FILL TRAP_DRAW_LINE    ; x31
 	.FILL BAD_TRAP	; x32
 	.FILL BAD_TRAP	; x33
 	.FILL BAD_TRAP	; x34
@@ -65,8 +65,8 @@
 	.FILL BAD_TRAP	; x3D
 	.FILL BAD_TRAP	; x3E
 	.FILL BAD_TRAP	; x3F
-	.FILL BAD_TRAP  ; x40
-	.FILL BAD_TRAP  ; x41
+	.FILL TRAP_ENABLE_INTERRUPTS  ; x40
+	.FILL TRAP_DISABLE_INTERRUPTS ; x41
 	.FILL BAD_TRAP	; x42
 	.FILL BAD_TRAP	; x43
 	.FILL BAD_TRAP	; x44
@@ -260,14 +260,15 @@
 
 ; the interrupt vector table
 ; interrupts are not currently implemented
-        .FILL BAD_INT	; x00
+INTERRUPT_VECTOR_TABLE
+    .FILL BAD_INT	; x00
 	.FILL BAD_INT	; x01
 	.FILL BAD_INT	; x02
 	.FILL BAD_INT	; x03
 	.FILL BAD_INT	; x04
 	.FILL BAD_INT	; x05
 	.FILL BAD_INT	; x06
-	.FILL BAD_INT	; x07
+	.FILL INT_KEYBOARD	; x07
 	.FILL BAD_INT	; x08
 	.FILL BAD_INT	; x09
 	.FILL BAD_INT	; x0A
@@ -517,30 +518,30 @@
 	.FILL BAD_INT	; xFE
 	.FILL BAD_INT	; xFF
 
-
 ;;; OS_START - operating system entry point (always starts at x0200)
 OS_START
-	;; set MPR
-	LD R0, MPR_INIT
+	;; Set the Memory Protection Register (MPR)
+	LD  R0, MPR_INIT
 	STI R0, OS_MPR
 
 	;; set timer interval
-	LD R0, TIM_INIT
+	LD  R0, TIM_INIT
 	STI R0, OS_TMI
 
 	;; start running user code (clear Privilege bit w/ JMPT)
 	LD R7, USER_CODE_ADDR
-	JMPT	R7
+	JMPT R7
 
 OS_KBSR	.FILL xFE00		; keyboard status register
 OS_KBDR	.FILL xFE02		; keyboard data register
 OS_DSR	.FILL xFE04		; display status register
 OS_DDR	.FILL xFE06		; display data register
-OS_TR	.FILL xFE08		; timer register
-OS_TMI  .FILL xFE0A             ; timer interval register
+OS_TMR	.FILL xFE08		; timer register
+OS_TMI  .FILL xFE0A     ; timer interval register
 OS_MPR	.FILL xFE12		; memory protection register
 OS_MCR	.FILL xFFFE		; machine control register
 
+;; Local register storage
 OS_SAVE_R0      .BLKW 1
 OS_SAVE_R1      .BLKW 1
 OS_SAVE_R2      .BLKW 1
@@ -553,34 +554,51 @@ OS_OUT_SAVE_R1  .BLKW 1
 OS_IN_SAVE_R7   .BLKW 1
                 	
 MASK_HI         .FILL x7FFF
+HIGH_BIT        .FILL x8000
 LOW_8_BITS      .FILL x00FF
 TIM_INIT        .FILL #40
 ;MPR_INIT	.FILL xFFFF	; user can access everything
-MPR_INIT	.FILL x0FF8	; user can access x3000 to xbfff
+MPR_INIT	    .FILL x0FF8	; user can access x3000 to xbfff
 USER_CODE_ADDR	.FILL x3000	; user code starts at x3000
-VIDEO_COLS	.FILL	128	; Number of pixels per row
-VIDEO_ROWS 	.FILL	124	; Number of rows
-VIDEO_MEM	.FILL	0xC000
         
 ;;; GETC - Read a single character of input from keyboard device into R0
 TRAP_GETC
 	LDI R0,OS_KBSR		; wait for a keystroke
 	BRzp TRAP_GETC
-	LDI R0,OS_KBDR		; read it and return
-	;; DMC this should be RTT to restore the privilege level to 'USER'
-	RTT
 
+	;; DMC change: clear the Ready Bit of the Keyboard Status Register
+	ST  R1, OS_SAVE_R1
+	LD  R1, MASK_HI
+	AND R0, R0, R1
+	STI R0, OS_KBSR
+	LD  R1, OS_SAVE_R1
+
+	LDI R0,OS_KBDR		; Read in the character
+
+	;; DMC this should be RTT to restore the privilege level
+	RTT
         
 ;;; OUT - Write the character in R0 to the console.
 TRAP_OUT
 	ST R1,OS_OUT_SAVE_R1	; save R1
 TRAP_OUT_WAIT
-	LDI R1,OS_DSR		; wait for the display to be ready
+	LDI R1,OS_DSR		    ; wait for the display to be ready
 	BRzp TRAP_OUT_WAIT
-	STI R0,OS_DDR		; write the character and return
+	STI R0,OS_DDR		    ; write the character and return
 	LD R1,OS_OUT_SAVE_R1	; restore R1
-	;; DMC this should be RTT to restore the privilege level to 'USER'
+
+	;; DMC this should be RTT to restore the privilege level
 	RTT
+
+;;; CLEAR_CONSOLE- clear the console
+TRAP_CLEAR_CONSOLE
+    ST R1,  OS_OUT_SAVE_R1	; save R1
+    LD R1, HIGH_BIT
+    STI R1, OS_DDR		    ; write the character and return
+    LD R1,OS_OUT_SAVE_R1	; restore R1
+
+    ;; DMC this should be RTT to restore the privilege level
+    RTT
 
                 
 ;;; PUTS - Write a NUL-terminated string of characters to the console,
@@ -609,11 +627,11 @@ TRAP_PUTS_DONE
 ;;; in R0 and also echoed to the console.        
 TRAP_IN
 	ST R7,OS_IN_SAVE_R7	; save R7 (no need to save R0, since we 
-				;    overwrite later
+				        ;    overwrite later
 	LEA R0,TRAP_IN_MSG	; prompt for input
 	PUTS
-	GETC			; read a character
-	OUT			; echo back to monitor
+	GETC			    ; read a character
+	OUT			        ; echo back to monitor
 	ST R0,OS_SAVE_R0	; save the character
 	AND R0,R0,#0		; write a linefeed, too
 	ADD R0,R0,#10
@@ -676,7 +694,7 @@ TRAP_PUTSP_DONE
 ;;; HALT - trap handler for halting machine
 TRAP_HALT	
 	LDI R0,OS_MCR		
-	LD R1,MASK_HI           ; clear run bit in MCR
+	LD R1,MASK_HI       ; clear run bit in MCR
 	AND R0,R0,R1
 	STI R0,OS_MCR		; halt!
 	BRnzp OS_START		; restart machine
@@ -693,6 +711,9 @@ BAD_INT		RTI
 
 TRAP_IN_MSG	.STRINGZ "\nInput a character> "
 
+;;  These are the parameters of the video display
+VIDEO_COLS	    .FILL	128	; Number of pixels per row
+VIDEO_ROWS 	    .FILL	124	; Number of rows
 ;
 ; Draw a rect on the WCSUSim monitor
 ;
@@ -708,7 +729,11 @@ TRAP_IN_MSG	.STRINGZ "\nInput a character> "
 ;	R6	temp
 ;
 TRAP_DRAW_RECT
-	;; Save the values in registers 5 and 6
+	;; Save the values in registers 0 - 3 and 5 and 6
+	ST R0, VIDEO_SAVE_R0
+	ST R1, VIDEO_SAVE_R1
+	ST R2, VIDEO_SAVE_R2
+	ST R3, VIDEO_SAVE_R3
 	ST R5, VIDEO_SAVE_R5
 	ST R6, VIDEO_SAVE_R6
 	
@@ -723,28 +748,28 @@ TRAP_DRAW_RECT
 	ADD	  R3, R3, R0
 	LD	  R5, VIDEO_ROWS	
 	CMP	  R3, R5		
-	BRnz	  TRAP_DRAW_RECT_FIRST_ROW
+	BRnz TRAP_DRAW_RECT_FIRST_ROW
 	LD	  R3, VIDEO_ROWS
 
 TRAP_DRAW_RECT_FIRST_ROW
 	;; Similarly, convert the value in R0 to be the first row
 	CMPi	  R0, #0
 	BRzp	  TRAP_DRAW_RECT_LAST_COLUMN
-	AND	  R0, R0, #0
+	CLR	      R0
 
 TRAP_DRAW_RECT_LAST_COLUMN
 	;; Convert the value in R2 to be the last column
 	ADD	   R2, R2, R1
 	LDI	   R5, VIDEO_COLS
 	CMP	   R2, R5
-	BRnz	   TRAP_DRAW_RECT_FIRST_COLUMN
+	BRnz   TRAP_DRAW_RECT_FIRST_COLUMN
 	LDI	   R2, VIDEO_COLS
 
 TRAP_DRAW_RECT_FIRST_COLUMN
 	;; Make sure the first column is not less than zero
 	CMPi 	   R1, #0
 	BRzp	   TRAP_DRAW_RECT_BEGIN_LOOP
-	AND	   R1, R1, #0
+	CLR        R1
 
 TRAP_DRAW_RECT_BEGIN_LOOP
 	;; Registers used here
@@ -783,11 +808,315 @@ TRAP_DRAW_RECT_CHECK_ROW
 
 TRAP_DRAW_RECT_END
 	;; Restore the saved registers
+    LD R0, VIDEO_SAVE_R0
+    LD R1, VIDEO_SAVE_R1
+    LD R2, VIDEO_SAVE_R2
+    LD R3, VIDEO_SAVE_R3
 	LD R5, VIDEO_SAVE_R5
 	LD R6, VIDEO_SAVE_R6
 	RTT
 
 ; Declare these here since the earlier versions are now unreachable
+VIDEO_SAVE_R0 .BLKW 1
+VIDEO_SAVE_R1 .BLKW 1
+VIDEO_SAVE_R2 .BLKW 1
+VIDEO_SAVE_R3 .BLKW 1
+VIDEO_SAVE_R4 .BLKW 1
 VIDEO_SAVE_R5 .BLKW 1
 VIDEO_SAVE_R6 .BLKW 1
-	
+VIDEO_SAVE_R7 .BLKW 1
+
+;; Constants for the Video Monitor
+VIDEO_MEM	.FILL	0xC000
+
+;; Draw a line using Bresenham's algorithm
+;; Register usage
+;;    R0   x0
+;;    R1   y0
+;;    R2   x1
+;;    R3   y1
+;;    R4   color
+;;    R5 temp
+;;    R6 temp
+;;    R7 temp
+
+TRAP_DRAW_LINE
+    ;; Save the temporary registers
+    ST R5, VIDEO_SAVE_R5
+    ST R6, VIDEO_SAVE_R6
+    ST R7, VIDEO_SAVE_R7
+
+    ;; Decide which octant we are in
+    ;;    if( abs(y1 - y0 ) < abs(x1 - x0) )
+    SUB R5, R3, R1
+    CMPi R5, #0
+    BRzp TRAP_DRAW_LINE_ABS_Y
+    ;; If y1 - y0 is negative, flip the sign
+    NOT R5, R5
+    ADD R5, R5, #1
+TRAP_DRAW_LINE_ABS_Y
+    SUB R6, R2, R0
+    CMPi R6, #0
+    BRzp TRAP_DRAW_LINE_CMP_ABS
+    ;; If x1 - x0 is negative, flip the sign
+    NOT R6, R6
+    ADD R6, R6, #1
+TRAP_DRAW_LINE_CMP_ABS
+    CMP R5, R6
+    BRzp TRAP_DRAW_LINE_HIGH_SLOPE_CASE
+
+    ;; We are in the low slope case -1 < slope < 1: x will be incremented by one each iteration.
+    ;; Decide if the line goes from right to left, or left to right
+    ;; Save the registers first
+    ST R0, VIDEO_SAVE_R0
+    ST R1, VIDEO_SAVE_R1
+    ST R2, VIDEO_SAVE_R2
+    ST R3, VIDEO_SAVE_R3
+
+    ;; Now compare X0 and X1 to find the direction of the line.
+    CMP R0, R2
+    BRnz TRAP_DRAW_LINE_LOW_SLOPE_LEFT_TO_RIGHT
+    ;; If we get here, X0 is greater than X1, so
+    ;; we need to swap x0 <--> x1 and y0 <--> y1
+    ;;     X0, X1
+    CPR R5, R0
+    CPR R0, R2
+    CPR R2, R5
+
+    ;;      Y0, Y1
+    CPR R5, R1
+    CPR R1, R3
+    CPR R3, R5
+
+    ;; Draw the actual line
+TRAP_DRAW_LINE_LOW_SLOPE_LEFT_TO_RIGHT
+    SUB R5, R2, R0  ; dx
+    SUB R6, R3, R1  ; dy
+    LC  R7, #1      ; Yi = 1
+
+    ;; Check if the line goes upwards, or downwards
+    CMPi R6, #0
+    BRzp TRAP_DRAW_LINE_LOW_SLOPE_UPWARDS
+
+    ;; If it slopes down, we need to invert everything so it seems to go upwards
+    LC R7, #-1      ; Yi = -1
+    NOT R6, R6      ; R6 --> -R6
+    ADD R6, R6, #1
+
+TRAP_DRAW_LINE_LOW_SLOPE_UPWARDS
+    ;; Setup
+    SHFli R3, R6, #1                    ; D = 2*dy - dx
+    SUB   R3, R3, R5
+
+    ;; Now we loop, finally!
+TRAP_DRAW_LINE_LOW_SLOPE_UPWARDS_LOOP_TOP
+    ;; for x from x0 to x1
+    CMP R0, R2
+    BRzp TRAP_DRAW_LINE_LOW_SLOPE_UPWARDS_LOOP_DONE
+
+    ;; Plot the current pixel
+    ;;    Save R5 and R6
+    ST R5, TRAP_DRAW_LINE_DX
+    ST R6, TRAP_DRAW_LINE_DY
+
+    ;; Compute the memory location corresponding to x and y
+    SHFli R6, R1, #7    ; R6 = y* 128
+    LD	  R5, VIDEO_MEM
+    ADD	  R6, R6, R5	; R6 = &VIDEO_ME + row * 128
+    ADD	  R6, R6, R0    ; R6 = &VIDEO_MEM + y*128 + x
+
+    STR	R4, R6, #0	; Store the color in the pixel
+
+    ;; Restore dx and dy
+    LD R5, TRAP_DRAW_LINE_DX
+    LD R6, TRAP_DRAW_LINE_DY
+
+    ;; See if y needs updating
+    CMPi R3, #0 ; if( D > 0 )
+    BRnz TRAP_DRAW_LINE_LOW_SLOPE_UPDATE_D
+    ADD R1, R1, R7 ; y += yi
+    SUB R3, R3, R5 ; D -= 2*dx
+    SUB R3, R3, R5
+
+TRAP_DRAW_LINE_LOW_SLOPE_UPDATE_D
+    ADD R3, R3, R6 ; D += 2*dy
+    ADD R3, R3, R6
+
+    ;; Also increment x
+    ADD R0, R0, #1
+    BR TRAP_DRAW_LINE_LOW_SLOPE_UPWARDS_LOOP_TOP
+
+TRAP_DRAW_LINE_LOW_SLOPE_UPWARDS_LOOP_DONE
+    ;; Restore the registers we used in the loop
+    LD R0, VIDEO_SAVE_R0
+    LD R1, VIDEO_SAVE_R1
+    LD R2, VIDEO_SAVE_R2
+    LD R3, VIDEO_SAVE_R3
+    BR TRAP_DRAW_LINE_END
+
+TRAP_DRAW_LINE_HIGH_SLOPE_CASE
+    ;; We are in the High slope case: slope < -1 or slope > 1: y will be incremented by one each iteration.
+    ;; Decide if the line goes from top to bottom, or bottom to top
+    ;; Save the registers first
+    ST R0, VIDEO_SAVE_R0
+    ST R1, VIDEO_SAVE_R1
+    ST R2, VIDEO_SAVE_R2
+    ST R3, VIDEO_SAVE_R3
+
+    ;; Now compare Y0 and Y1 to find the direction of the line.
+    CMP R1, R3
+    BRnz TRAP_DRAW_LINE_HIGH_SLOPE_TOP_TO_BOTTOM
+    ;; If we get here, Y0 is greater than Y1, so
+    ;; we need to swap x0 <--> x1 and y0 <--> y1
+    ;;     X0, X1
+    CPR R5, R0
+    CPR R0, R2
+    CPR R2, R5
+
+    ;;      Y0, Y1
+    CPR R5, R1
+    CPR R1, R3
+    CPR R3, R5
+
+    ;; Draw the actual line
+TRAP_DRAW_LINE_HIGH_SLOPE_TOP_TO_BOTTOM
+    SUB R5, R2, R0  ; dx
+    SUB R6, R3, R1  ; dy
+    LC  R7, #1      ; Xi = 1
+
+    ;; Check if the line goes to the left or to the right
+    CMPi R5, #0
+    BRzp TRAP_DRAW_LINE_LOW_SLOPE_RIGHTWARDS
+
+    ;; If it slopes to the left, we need to invert everything so it seems to go to the right
+    LC R7, #-1      ; Xi = -1
+    NOT R5, R5      ; R5 --> -R5  ( dx --> -dx )
+    ADD R5, R5, #1
+
+TRAP_DRAW_LINE_LOW_SLOPE_RIGHTWARDS
+    ;; Setup
+    CPR   R2, R3      ; R2 = Y1, crunch X1
+    SHFli R3, R5, #1  ; D = 2*dx - dy
+    SUB   R3, R3, R6
+
+    ;; Now we loop, finally!
+TRAP_DRAW_LINE_HIGH_SLOPE_RIGHTWARDS_LOOP_TOP
+    ;; for y from y0 to y1
+    CMP R1, R2
+    BRzp TRAP_DRAW_LINE_HIGH_SLOPE_RIGHTWARDS_LOOP_DONE
+
+    ;; Plot the current pixel
+    ;;    Save R5 and R6
+    ST R5, TRAP_DRAW_LINE_DX
+    ST R6, TRAP_DRAW_LINE_DY
+
+    ;; Compute the memory location corresponding to x and y
+    SHFli R6, R1, #7    ; R6 = y* 128
+    LD	  R5, VIDEO_MEM
+    ADD	  R6, R6, R5	; R6 = &VIDEO_ME + row * 128
+    ADD	  R6, R6, R0    ; R6 = &VIDEO_MEM + y*128 + x
+
+    STR	R4, R6, #0	; Store the color in the pixel
+
+    ;; Restore dx and dy
+    LD R5, TRAP_DRAW_LINE_DX
+    LD R6, TRAP_DRAW_LINE_DY
+
+    ;; See if x needs updating
+    CMPi R3, #0 ; if( D > 0 )
+    BRnz TRAP_DRAW_LINE_HIGH_SLOPE_UPDATE_D
+    ADD R0, R0, R7 ; x += yi
+    SUB R3, R3, R6 ; D -= 2*dy
+    SUB R3, R3, R6
+
+TRAP_DRAW_LINE_HIGH_SLOPE_UPDATE_D
+    ADD R3, R3, R5 ; D += 2*dx
+    ADD R3, R3, R5
+
+    ;; Also increment y
+    ADD R1, R1, #1
+    BR TRAP_DRAW_LINE_HIGH_SLOPE_RIGHTWARDS_LOOP_TOP
+
+TRAP_DRAW_LINE_HIGH_SLOPE_RIGHTWARDS_LOOP_DONE
+    ;; Restore the registers we used in the loop
+    LD R0, VIDEO_SAVE_R0
+    LD R1, VIDEO_SAVE_R1
+    LD R2, VIDEO_SAVE_R2
+    LD R3, VIDEO_SAVE_R3
+    BR TRAP_DRAW_LINE_END
+
+
+TRAP_DRAW_LINE_END
+    ;; Restore the temporary registers
+    LD R5, VIDEO_SAVE_R5
+    LD R6, VIDEO_SAVE_R6
+    LD R7, VIDEO_SAVE_R7
+    RTT
+
+;; Local variables
+TRAP_DRAW_LINE_DX .BLKW   1
+TRAP_DRAW_LINE_DY .BLKW   1
+
+;; Interrupt handling
+INT_SAVE_R0 .BLKW 1
+INT_SAVE_R1 .BLKW 1
+
+;; Interrupt vectors
+KEYBOARD_INT_VECTOR .FILL x0007
+INT_MCR	.FILL xFFFE		; machine control register
+ENABLE_INTERRUPTS_BIT .FILL x4000
+
+;; Enable interrupts
+TRAP_ENABLE_INTERRUPTS
+    ;; Save registers
+    ST R0, INT_SAVE_R0
+    ST R1, INT_SAVE_R1
+
+    ;; Get the current value of the Machine Control Register
+    LDI R0, INT_MCR
+
+    ;; Get the 'Enable Interrupts' bit
+    LD R1, ENABLE_INTERRUPTS_BIT
+
+    ;; Set the Interrupt Enable bit
+    OR R0, R0, R1
+
+    ;; Save the new value away
+    STI R0, INT_MCR
+
+    ;; Restore the registers
+    LD R0, INT_SAVE_R0
+    LD R1, INT_SAVE_R1
+
+    ;; That's it
+    RTT
+
+;; Disable interrupts
+TRAP_DISABLE_INTERRUPTS
+    ;; Save registers
+    ST R0, INT_SAVE_R0
+    ST R1, INT_SAVE_R1
+
+    ;; Get the current value of the Machine Control Register
+    LDI R0, INT_MCR
+
+    ;; Get the 'Enable Interrupts' bit
+    LD R1, ENABLE_INTERRUPTS_BIT
+
+    ;; Clear the Interrupt Enable bit
+    NOT R1, R1
+    AND R0, R0, R1
+
+    ;; Save the new value away
+    STI R0, INT_MCR
+
+    ;; Restore the registers
+    LD R0, INT_SAVE_R0
+    LD R1, INT_SAVE_R1
+
+    ;; That's it
+    RTT
+
+;; Interrupt handlers
+INT_KEYBOARD
+    RTI

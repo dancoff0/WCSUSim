@@ -77,6 +77,7 @@ public class VideoConsole extends JPanel implements TableModelListener
       {
         for( int j = 0; j < n; ++j )
         {
+          //System.out.println( "n4 + j = " + n4 + j + ", n3 + i = " + n3 + i );
           this.image.setRGB( n4 + j, n3 + i, convertToRGB );
         }
       }

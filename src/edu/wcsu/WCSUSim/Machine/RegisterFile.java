@@ -5,6 +5,7 @@ import edu.wcsu.WCSUSim.Exceptions.IllegalMemAccessException;
 import edu.wcsu.WCSUSim.WCSUSim;
 
 import javax.swing.table.AbstractTableModel;
+import java.util.Stack;
 
 // This class implements the Register File for the LC3 computer
 public class RegisterFile extends AbstractTableModel
@@ -30,6 +31,10 @@ public class RegisterFile extends AbstractTableModel
   private static int[]    indCol;
   private boolean dirty;
   private int             mostRecentlyWrittenValue;
+
+  // This stack will hold the privilege levels of pending "TRAPS"
+  private Stack<Boolean> privilegeStack = null;
+  private static final int PRIVILEGE_BIT = 0x8000;
 
   RegisterFile( final Machine machine )
   {
@@ -415,6 +420,26 @@ public class RegisterFile extends AbstractTableModel
     setPSR( newPSR );
   }
 
+  void pushPrivMode()
+  {
+    if( privilegeStack == null ) privilegeStack = new Stack<Boolean>();
+
+    // Get the current privilege level
+    boolean currentPrivilege = (PSR.getValue() & PRIVILEGE_BIT) != 0;
+    privilegeStack.push( currentPrivilege );
+  }
+
+  boolean popPrivMode()
+  {
+    // Sanity check
+    if( privilegeStack == null || privilegeStack.isEmpty() )
+    {
+      System.out.println( "RegisterFile: popPrivMode: stack is empty!" );
+      return false;
+    }
+
+    return privilegeStack.pop();
+  }
 
   //Set the current privilege level
   void setPrivMode( final boolean b )
