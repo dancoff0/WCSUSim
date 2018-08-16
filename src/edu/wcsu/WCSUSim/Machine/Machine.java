@@ -20,6 +20,7 @@ import java.awt.event.ActionListener;
 import java.util.Hashtable;
 import java.io.PrintWriter;
 import java.util.LinkedList;
+import java.util.Stack;
 
 // 
 // Decompiled by Procyon v0.5.30
@@ -43,6 +44,8 @@ public class Machine implements Runnable
   public static final int NUM_CONTINUES = 400;
   boolean stopImmediately;
   private boolean continueMode;
+
+  private Stack<IntDef> pendingInterrupts = new Stack<>();
 
   public Machine()
   {
@@ -126,7 +129,41 @@ public class Machine implements Runnable
       return;
     }
 
-    System.out.println( "Machine: signalInterrupt: preparing interrupt for vector " + interruptVector );
+    //System.out.println( "Machine: signalInterrupt: preparing interrupt for vector " + interruptVector );
+    String intEncoding = "1000 0000 " + Integer.toBinaryString( 1 << 8 | interruptVector ).substring( 1 );
+    //System.out.println( "Machine: signalInterrupt: encoding is " + intEncoding );
+    IntDef intDef = new IntDef();
+    intDef.setOpcode( "INT" );
+    intDef.setEncoding( intEncoding );
+    intDef.setInterruptVector( interruptVector );
+    pendingInterrupts.push( intDef );
+  }
+
+  private class IntDef extends InstructionDef
+  {
+    private int interruptVector;
+    public boolean isCall()
+    {
+      return true;
+    }
+
+    public void setInterruptVector( int interruptVector )
+    {
+      this.interruptVector = interruptVector;
+    }
+
+    public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+    {
+      registerFile.pushWord( registerFile.getPSR() );
+      registerFile.pushWord( pc );
+      registerFile.setPrivMode( true );
+      //registerFile.setRegister( 7, pc + 1 );
+      //System.out.println( "Machine: IntDef: word is " + word );
+      //System.out.println( "Machine: IntDef: interrupt vector is " + interruptVector );
+      int intTableEntry = 0x0100 + interruptVector;
+      //System.out.println( "Machine: IntDef: intTableEntry = " + intTableEntry );
+      return memory.read( intTableEntry ).getValue();
+    }
   }
 
   public Memory getMemory()
@@ -399,6 +436,22 @@ public class Machine implements Runnable
         final int pc = this.registers.getPC();
         this.registers.checkAddr( pc );
         final Word inst = this.memory.getInst( pc );
+
+        // Check if there is an interrupt pending
+        if( ( registers.getMCR() & Memory.ENABLE_INTERRUPTS_BIT ) != 0 )
+        {
+          if( !pendingInterrupts.isEmpty() )
+          {
+            IntDef currentInterrupt = pendingInterrupts.pop();
+            //System.out.println( "Machine: executePumpContinues: inst at pc = " + pc + " is " + inst );
+            final int interruptAddress = currentInterrupt.execute( inst, pc, registers, memory, this );
+            //System.out.println( "Machine: executePumpContinues: executing interrupt at " + interruptAddress );
+            registers.setPC( interruptAddress );
+            continue;
+          }
+        }
+
+        this.registers.checkAddr( pc );
         final InstructionDef instructionDef = ISA.lookupTable[inst.getValue()];
         if( instructionDef == null )
         {

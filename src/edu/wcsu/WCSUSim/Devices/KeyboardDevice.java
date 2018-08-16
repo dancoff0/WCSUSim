@@ -226,9 +226,19 @@ public class KeyboardDevice
             // Save it in the keyboard data register
             memory.write( Memory.OS_KBDR, currentValue );
 
-            // Reset the Ready bit
+            // Set the Ready bit
             currentStatus = new Word( newStatus.getValue() | KEYBOARD_READY_BIT );
             memory.write( Memory.OS_KBSR, currentStatus.getValue() );
+
+            // Check if interrupts are enabled. If so, signal an interrupt
+            if( (currentStatus.getValue() & Memory.ENABLE_INTERRUPTS_BIT ) != 0)
+            {
+              // Get our interrupt vector
+              int interruptVector = currentStatus.getValue() & 0x00FF;
+              //System.out.println( "Signaling an additional interrupt for the keyboard" );
+              memory.getMachine().signalInterrupt( interruptVector );
+            }
+
           }
         }
         catch( IOException ioe )

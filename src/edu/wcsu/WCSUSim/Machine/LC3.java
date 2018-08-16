@@ -241,7 +241,12 @@ public class LC3 extends ISA
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine )
       {
         //System.out.println( "RTT: popping privilege bit at pc = " + n );
-        registerFile.setPrivMode( registerFile.popPrivMode() );
+        // Get the previously saved PSR
+        int savedPSR = registerFile.popWord();
+
+        // Check the privilege bit
+        boolean savedPrivilege = (savedPSR & RegisterFile.PRIVILEGE_BIT) != 0;
+        registerFile.setPrivMode( savedPrivilege );
         return registerFile.getRegister( 7 );
       }
     } );
@@ -254,6 +259,30 @@ public class LC3 extends ISA
         return registerFile.getRegister( this.getDReg( word ) );
       }
     } );
+
+    // Jump to a user's interrupt service routine
+    ISA.createDef( "JMPISR", "1100 000 ddd 000011", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine )
+      {
+        // Save the current PSR and PC
+        registerFile.pushWord( registerFile.getPSR() );
+
+        // Our return address is one beyond the current instruction!
+        registerFile.pushWord( pc + 1 );
+
+        // Set the privilege level to user level
+        registerFile.setPrivMode( false );
+
+        // Get the address of the ISR
+        int ISRaddress = registerFile.getRegister( getDReg( word  ) );
+
+        // That's it.
+        return ISRaddress;
+
+      }
+    }
+    );
 
     ISA.createDef( "JSR", "0100 1 ppppppppppp", new InstructionDef()
     {
@@ -746,15 +775,25 @@ public class LC3 extends ISA
     {
       public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalInstructionException
       {
-        if( registerFile.getPrivMode() )
-        {
-          final int register = registerFile.getRegister( 6 );
-          final int value = memory.read( register ).getValue();
-          registerFile.setRegister( 6, register + 1 );
-          registerFile.setPSR( memory.read( register ).getValue() );
-          return value;
-        }
-        throw new IllegalInstructionException( "RTI can only be executed in privileged mode" );
+        //if( registerFile.getPrivMode() )
+        //{
+          //final int register = registerFile.getRegister( 6 );
+          //final int value = memory.read( register ).getValue();
+          //registerFile.setRegister( 6, register + 1 );
+          //registerFile.setPSR( memory.read( register ).getValue() );
+          // Get the previous PC
+          int previousPC = registerFile.popWord();
+
+          // Get the previous PSR
+          int previousPSR = registerFile.popWord();
+
+          // Restore the PSR
+          registerFile.setPSR( previousPSR );
+
+          // That's it!
+          return previousPC;
+        //}
+        //throw new IllegalInstructionException( "RTI can only be executed in privileged mode" );
       }
     } );
     ISA.createDef( "GETC",          "1111 0000 00100000", new TrapDef() );
@@ -796,7 +835,9 @@ public class LC3 extends ISA
 
     public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
     {
-      registerFile.pushPrivMode();
+      // Save the current PSR so that the current privilege bit may be restored when the TRAP is done.
+      int currentPSR = registerFile.getPSR();
+      registerFile.pushWord( currentPSR );
       registerFile.setPrivMode( true );
       registerFile.setRegister( 7, n + 1 );
       //System.out.println( "Pushed privilege mode for " + word.getZext( 8, 0 ) );

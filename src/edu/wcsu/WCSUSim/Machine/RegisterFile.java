@@ -33,8 +33,8 @@ public class RegisterFile extends AbstractTableModel
   private int             mostRecentlyWrittenValue;
 
   // This stack will hold the privilege levels of pending "TRAPS"
-  private Stack<Boolean> privilegeStack = null;
-  private static final int PRIVILEGE_BIT = 0x8000;
+  private Stack<Integer> systemStack = null;
+  public static final int PRIVILEGE_BIT = 0x8000;
 
   RegisterFile( final Machine machine )
   {
@@ -420,25 +420,25 @@ public class RegisterFile extends AbstractTableModel
     setPSR( newPSR );
   }
 
-  void pushPrivMode()
+  void pushWord( int word )
   {
-    if( privilegeStack == null ) privilegeStack = new Stack<Boolean>();
+    if( systemStack == null ) systemStack = new Stack<Integer>();
 
     // Get the current privilege level
-    boolean currentPrivilege = (PSR.getValue() & PRIVILEGE_BIT) != 0;
-    privilegeStack.push( currentPrivilege );
+    //boolean currentPrivilege = (PSR.getValue() & PRIVILEGE_BIT) != 0;
+    systemStack.push( word );
   }
 
-  boolean popPrivMode()
+  int popWord()
   {
     // Sanity check
-    if( privilegeStack == null || privilegeStack.isEmpty() )
+    if( systemStack == null || systemStack.isEmpty() )
     {
-      System.out.println( "RegisterFile: popPrivMode: stack is empty!" );
-      return false;
+      System.out.println( "RegisterFile: popWord: stack is empty!" );
+      return 0;
     }
 
-    return privilegeStack.pop();
+    return systemStack.pop();
   }
 
   //Set the current privilege level
