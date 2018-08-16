@@ -67,8 +67,8 @@
 	.FILL BAD_TRAP	; x3F
 	.FILL TRAP_ENABLE_INTERRUPTS  ; x40
 	.FILL TRAP_DISABLE_INTERRUPTS ; x41
-	.FILL BAD_TRAP	; x42
-	.FILL BAD_TRAP	; x43
+	.FILL TRAP_ATTACH_ISR	      ; x42
+	.FILL TRAP_DETACH_ISR	      ; x43
 	.FILL BAD_TRAP	; x44
 	.FILL BAD_TRAP	; x45
 	.FILL BAD_TRAP	; x46
@@ -532,6 +532,7 @@ OS_START
 	LD R7, USER_CODE_ADDR
 	JMPT R7
 
+;; Register locations
 OS_KBSR	.FILL xFE00		; keyboard status register
 OS_KBDR	.FILL xFE02		; keyboard data register
 OS_DSR	.FILL xFE04		; display status register
@@ -560,7 +561,7 @@ TIM_INIT        .FILL #40
 ;MPR_INIT	.FILL xFFFF	; user can access everything
 MPR_INIT	    .FILL x0FF8	; user can access x3000 to xbfff
 USER_CODE_ADDR	.FILL x3000	; user code starts at x3000
-        
+
 ;;; GETC - Read a single character of input from keyboard device into R0
 TRAP_GETC
 	LDI R0,OS_KBSR		; wait for a keystroke
@@ -690,7 +691,7 @@ TRAP_PUTSP_DONE
 	;;  DMC this should be RTT to restore the privilege level to 'USER'
 	RTT
 
-        
+
 ;;; HALT - trap handler for halting machine
 TRAP_HALT	
 	LDI R0,OS_MCR		
@@ -1060,11 +1061,20 @@ TRAP_DRAW_LINE_DY .BLKW   1
 ;; Interrupt handling
 INT_SAVE_R0 .BLKW 1
 INT_SAVE_R1 .BLKW 1
+INT_SAVE_R2 .BLKW 1
 
 ;; Interrupt vectors
 KEYBOARD_INT_VECTOR .FILL x0007
-INT_MCR	.FILL xFFFE		; machine control register
+INT_MCR	            .FILL xFFFE		; machine control register
 ENABLE_INTERRUPTS_BIT .FILL x4000
+INT_MASK_HIGH_BIT   .FILL x7FFF
+
+;; Copy of the register definitions
+INT_OS_KBSR	.FILL xFE00		; keyboard status register
+INT_OS_KBDR	.FILL xFE02		; keyboard data register
+
+;; These are the locations of the user's ISRs
+INT_KEYPRESS_ISR .FILL x0000
 
 ;; Enable interrupts
 TRAP_ENABLE_INTERRUPTS
@@ -1117,6 +1127,73 @@ TRAP_DISABLE_INTERRUPTS
     ;; That's it
     RTT
 
+;; Attach a user ISR
+;;    Register usage
+;;    R0   Interrupt Vector
+;;    R1   Address of ISR
+TRAP_ATTACH_ISR
+    ;; Check the interrupt vector
+    ST R2, INT_SAVE_R2
+    LD R2, KEYBOARD_INT_VECTOR
+
+    CMP R0, R2
+    BRnp TRAP_ATTACH_ISR_UNKNOWN_VECTOR
+
+    ST R1, INT_KEYPRESS_ISR
+
+TRAP_ATTACH_ISR_UNKNOWN_VECTOR
+    LD R2, INT_SAVE_R2
+
+    ;; That's it
+    RTT
+
+;; Detach a previously attached user ISR
+;;    Register usage
+;;    R0   Interrupt Vector
+TRAP_DETACH_ISR
+    ;; Check the interrupt vector
+    ST R2, INT_SAVE_R2
+    LD R2, KEYBOARD_INT_VECTOR
+
+    CMP R0, R2
+    BRnp TRAP_DETACH_ISR_UNKNOWN_VECTOR
+
+    CLR R2
+    ST R2, INT_KEYPRESS_ISR
+
+TRAP_DETACH_ISR_UNKNOWN_VECTOR
+    LD R2, INT_SAVE_R2
+
+    ;; That's it
+    RTT
+
 ;; Interrupt handlers
 INT_KEYBOARD
+    ;; Save register 0
+    ST R0, INT_SAVE_R0
+
+    ;; Copy the value in the Keyboard Data Register to R0
+    LDI R0, INT_OS_KBDR
+
+    ;; Get the address of the user's ISR
+    ST   R1, INT_SAVE_R1
+    LD   R1, INT_KEYPRESS_ISR
+    CMPi R1, #0
+    BRnz INT_KEYBOARD_RESTORE_REGISTERS
+
+    ;; Go execute the ISR
+    JMPISR R1
+
+    ;; Clear the "Ready Bit" in the Keyboard Status Register
+    ST  R2, INT_SAVE_R2
+    LDI R1, INT_OS_KBSR
+    LD  R2, INT_MASK_HIGH_BIT
+    AND R1, R1, R2
+    LD  R2, INT_SAVE_R2
+    STI R1, INT_OS_KBSR
+
+INT_KEYBOARD_RESTORE_REGISTERS
+    ;; All done!
+    LD R0, INT_SAVE_R0
+    LD R1, INT_SAVE_R1
     RTI
