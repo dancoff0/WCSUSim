@@ -103,9 +103,9 @@ public class Assembler
     {
       if( instruction.getLabel() != null )
       {
-        if( instruction.getLabel().length() > 20 )
+        if( instruction.getLabel().length() > 200 )
         {
-          instruction.error( "Labels can be no longer than 20 characters ('" + instruction.getLabel() + "')." );
+          instruction.error( "Labels can be no longer than 200 characters ('" + instruction.getLabel() + "')." );
         }
         if( nextAddress > 65535 )
         {

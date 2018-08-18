@@ -20,6 +20,7 @@ import java.awt.event.ActionListener;
 import java.util.Hashtable;
 import java.io.PrintWriter;
 import java.util.LinkedList;
+import java.util.Stack;
 
 // 
 // Decompiled by Procyon v0.5.30
@@ -43,6 +44,8 @@ public class Machine implements Runnable
   public static final int NUM_CONTINUES = 400;
   boolean stopImmediately;
   private boolean continueMode;
+
+  private Stack<IntDef> pendingInterrupts = new Stack<>();
 
   public Machine()
   {
@@ -113,6 +116,53 @@ public class Machine implements Runnable
     if( this.isTraceEnabled() )
     {
       this.disableTrace();
+    }
+  }
+
+
+  public void signalInterrupt( final int interruptVector )
+  {
+    // Sanity check
+    if( ( registers.getMCR() & Memory.ENABLE_INTERRUPTS_BIT ) == 0 )
+    {
+      System.out.println( "Machine: signalInterrupt: caught interrupt signal, but interrupts are currently disabled" );
+      return;
+    }
+
+    //System.out.println( "Machine: signalInterrupt: preparing interrupt for vector " + interruptVector );
+    String intEncoding = "1000 0000 " + Integer.toBinaryString( 1 << 8 | interruptVector ).substring( 1 );
+    //System.out.println( "Machine: signalInterrupt: encoding is " + intEncoding );
+    IntDef intDef = new IntDef();
+    intDef.setOpcode( "INT" );
+    intDef.setEncoding( intEncoding );
+    intDef.setInterruptVector( interruptVector );
+    pendingInterrupts.push( intDef );
+  }
+
+  private class IntDef extends InstructionDef
+  {
+    private int interruptVector;
+    public boolean isCall()
+    {
+      return true;
+    }
+
+    public void setInterruptVector( int interruptVector )
+    {
+      this.interruptVector = interruptVector;
+    }
+
+    public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+    {
+      registerFile.pushWord( registerFile.getPSR() );
+      registerFile.pushWord( pc );
+      registerFile.setPrivMode( true );
+      //registerFile.setRegister( 7, pc + 1 );
+      //System.out.println( "Machine: IntDef: word is " + word );
+      //System.out.println( "Machine: IntDef: interrupt vector is " + interruptVector );
+      int intTableEntry = 0x0100 + interruptVector;
+      //System.out.println( "Machine: IntDef: intTableEntry = " + intTableEntry );
+      return memory.read( intTableEntry ).getValue();
     }
   }
 
@@ -218,26 +268,70 @@ public class Machine implements Runnable
     String string;
     try
     {
+      // Open the .obj file
       final FileInputStream fileInputStream = new FileInputStream( file );
-      fileInputStream.read( array );
-      int convertByteArray = Word.convertByteArray( array[0], array[1] );
+
+      // Read in the first two bytes and convert them into a word.
+      int bytesRead = fileInputStream.read( array );
+
+      // This should be the "ADDRESS_MARKER"
+      Word testMarker = new Word( Word.convertByteArray( array[0], array[1] ) );
+      if( !testMarker.equals( ISA.ADDRESS_MARKER ) )
+      {
+        throw new IOException( ".obj file did not start with the require address marker: " + testMarker );
+      }
+
+      // Now get the next two bytes. These are the base address
+      bytesRead = fileInputStream.read( array );
+
+      // Convert this into an int. This will be the starting address
+      int baseAddress = Word.convertByteArray( array[0], array[1] );
+
+      // Now loop over the instructions
       while( fileInputStream.read( array ) == 2 )
       {
-        final Integer n = new Integer( convertByteArray );
-        if( this.symbolTable.contains( n ) )
+        // Decide what kind of information this is.
+        int newValue = Word.convertByteArray( array[0], array[1] );
+        testMarker = new Word( newValue );
+        if( testMarker.equals( ISA.ADDRESS_MARKER ) )
         {
-          this.symbolTable.remove( ((String) this.inverseTable.get( n )).toLowerCase() );
-          this.inverseTable.remove( n );
+          // Get the new address
+          bytesRead = fileInputStream.read( array );
+
+          // Convert this into an int. This will be the starting address
+          baseAddress = Word.convertByteArray( array[0], array[1] );
+
+          //continue;
         }
-        this.memory.write( convertByteArray, Word.convertByteArray( array[0], array[1] ) );
-        ++convertByteArray;
+        else if( testMarker.equals( ISA.DATA_MARKER ) )
+        {
+          // Remove the current address from the symbol table
+          //final Integer n = new Integer( baseAddress );
+          if( this.symbolTable.contains( baseAddress ) )
+          {
+            this.symbolTable.remove( ((String) this.inverseTable.get( baseAddress )).toLowerCase() );
+            this.inverseTable.remove( baseAddress );
+          }
+
+          // Get the new data
+          bytesRead = fileInputStream.read( array );
+
+          // Convert this into an int. This will be the starting address
+          int newData = Word.convertByteArray( array[0], array[1] );
+          this.memory.write( baseAddress, newData );
+          ++baseAddress;
+        }
+        else
+        {
+          throw new IOException( ".obj file contains an unknown MARKER: " + testMarker );
+        }
       }
       fileInputStream.close();
       string = "Loaded object file '" + path + "'";
     }
     catch( IOException ex )
     {
-      return "Error: Could not load object file '" + path + "'";
+      return "Error: Could not load object file '" + path + "'" + ": " + ex.getMessage();
     }
     String substring = path;
     if( path.endsWith( ".obj" ) )
@@ -342,6 +436,22 @@ public class Machine implements Runnable
         final int pc = this.registers.getPC();
         this.registers.checkAddr( pc );
         final Word inst = this.memory.getInst( pc );
+
+        // Check if there is an interrupt pending
+        if( ( registers.getMCR() & Memory.ENABLE_INTERRUPTS_BIT ) != 0 )
+        {
+          if( !pendingInterrupts.isEmpty() )
+          {
+            IntDef currentInterrupt = pendingInterrupts.pop();
+            //System.out.println( "Machine: executePumpContinues: inst at pc = " + pc + " is " + inst );
+            final int interruptAddress = currentInterrupt.execute( inst, pc, registers, memory, this );
+            //System.out.println( "Machine: executePumpContinues: executing interrupt at " + interruptAddress );
+            registers.setPC( interruptAddress );
+            continue;
+          }
+        }
+
+        this.registers.checkAddr( pc );
         final InstructionDef instructionDef = ISA.lookupTable[inst.getValue()];
         if( instructionDef == null )
         {

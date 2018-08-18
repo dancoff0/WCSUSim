@@ -6,15 +6,19 @@ import edu.wcsu.WCSUSim.Display.GUI;
 
 public class TempRun implements Runnable
 {
-  GUI ms;
+  GUI gui;
 
-  public TempRun( final GUI ms )
+  public TempRun( final GUI gui )
   {
-    this.ms = ms;
+    this.gui = gui;
   }
 
   public void run()
   {
-    this.ms.setUpGUI();
+    // Set up the GUI
+    gui.setUpGUI();
+
+    // Now initialize any necessary components.
+    gui.initialize();
   }
 }

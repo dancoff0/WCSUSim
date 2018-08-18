@@ -82,10 +82,12 @@ public class TimerDevice
     {
       return false;
     }
+    /* DMC: what does this even do?
     if( this.mode != TimerDevice.AUTOMATIC_TIMER )
     {
       return this.kb.hasTimerTick();
     }
+    */
     final long currentTimeMillis = System.currentTimeMillis();
     if( currentTimeMillis - this.lastTime > this.interval )
     {
