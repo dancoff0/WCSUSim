@@ -796,16 +796,20 @@ public class LC3 extends ISA
         //throw new IllegalInstructionException( "RTI can only be executed in privileged mode" );
       }
     } );
-    ISA.createDef( "GETC",          "1111 0000 00100000", new TrapDef() );
-    ISA.createDef( "OUT",           "1111 0000 00100001", new TrapDef() );
-    ISA.createDef( "PUTS",          "1111 0000 00100010", new TrapDef() );
-    ISA.createDef( "IN",            "1111 0000 00100011", new TrapDef() );
-    ISA.createDef( "PUTSP",         "1111 0000 00100100", new TrapDef() );
-    ISA.createDef( "HALT",          "1111 0000 00100101", new TrapDef() );
-    ISA.createDef( "CLEAR_CONSOLE", "1111 0000 00100110", new TrapDef() );
-    ISA.createDef( "DRAW_RECT",     "1111 0000 00110000", new TrapDef() );
-    ISA.createDef( "DRAW_LINE",     "1111 0000 00110001", new TrapDef() );
-    ISA.createDef( "TRAP",          "1111 0000 uuuuuuuu", new TrapDef() );
+    ISA.createDef( "GETC",              "1111 0000 00100000", new TrapDef() );
+    ISA.createDef( "OUT",               "1111 0000 00100001", new TrapDef() );
+    ISA.createDef( "PUTS",              "1111 0000 00100010", new TrapDef() );
+    ISA.createDef( "IN",                "1111 0000 00100011", new TrapDef() );
+    ISA.createDef( "PUTSP",             "1111 0000 00100100", new TrapDef() );
+    ISA.createDef( "HALT",              "1111 0000 00100101", new TrapDef() );
+    ISA.createDef( "CLEAR_CONSOLE",     "1111 0000 00100110", new TrapDef() );
+    ISA.createDef( "DRAW_RECT",         "1111 0000 00110000", new TrapDef() );
+    ISA.createDef( "DRAW_LINE",         "1111 0000 00110001", new TrapDef() );
+    ISA.createDef( "ENABLE_INTERRUPTS", "1111 0000 01000000", new TrapDef() );
+    ISA.createDef( "DISABLE_INTERRUPTS","1111 0000 01000001", new TrapDef() );
+    ISA.createDef( "ATTACH_ISR",        "1111 0000 01000010", new TrapDef() );
+    ISA.createDef( "DETACH_ISR",        "1111 0000 01000011", new TrapDef() );
+    ISA.createDef( "TRAP",              "1111 0000 uuuuuuuu", new TrapDef() );
 
   }
 
