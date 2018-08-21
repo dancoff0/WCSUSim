@@ -7,6 +7,11 @@ import edu.wcsu.WCSUSim.Exceptions.IllegalMemAccessException;
 
 public class LC3 extends ISA
 {
+  // Constants
+  public static final int SIGNBIT         = 0x00008000;
+  public static final int CARRYBIT        = 0x00010000;
+  public static final int SIXTEENBIT_MASK = 0x0000FFFF;
+
   public void init()
   {
     super.init();
@@ -172,10 +177,23 @@ public class LC3 extends ISA
       @Override
       public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
       {
-        final int sValue = registerFile.getRegister( getSReg( word  ) );
-        final int tValue = registerFile.getRegister( getTReg( word  ) );
+        int sValue = registerFile.getRegister( getSReg( word  ) );
+        int tValue = registerFile.getRegister( getTReg( word  ) );
+
+        // Need to check the sign bits
+        if( (sValue & SIGNBIT ) != 0 ) sValue = -sValue;
+        if( (tValue & SIGNBIT ) != 0 ) tValue = -tValue;
         final int nzp = sValue - tValue;
-        registerFile.setNZP( nzp );
+        int sign = 0;
+        if( nzp < 0 )
+        {
+          sign = -1;
+        }
+        else if( nzp > 0 )
+        {
+          sign = +1;
+        }
+        registerFile.setNZP( sign );
         return n + 1;
       }
     } );
@@ -188,7 +206,16 @@ public class LC3 extends ISA
         final int sValue = registerFile.getRegister( getSReg( word ) );
         final int tValue = registerFile.getRegister( getTReg( word ) );
         final int nzp = sValue - tValue;
-        registerFile.setNZP( nzp );
+        int sign = 0;
+        if( nzp < 0 )
+        {
+          sign = -1;
+        }
+        else if( nzp > 0 )
+        {
+          sign = +1;
+        }
+        registerFile.setNZP( sign );
         return n + 1;
       }
     } );
@@ -198,10 +225,20 @@ public class LC3 extends ISA
       @Override
       public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
       {
-        final int sValue = registerFile.getRegister( getSReg( word  ) );
+        int sValue = registerFile.getRegister( getSReg( word  ) );
+        if( ( sValue & SIGNBIT ) != 0 ) sValue = -sValue;
         final int iValue = getSignedImmed( word );
         final int nzp = sValue - iValue;
-        registerFile.setNZP( nzp );
+        int sign = 0;
+        if( nzp < 0 )
+        {
+          sign = -1;
+        }
+        else if( nzp > 0 )
+        {
+          sign = +1;
+        }
+        registerFile.setNZP( sign );
         return n + 1;
       }
     } );
@@ -214,7 +251,16 @@ public class LC3 extends ISA
         final int sValue = registerFile.getRegister( getSReg( word  ) );
         final int uValue = getUnsignedImmed( word );
         final int nzp = sValue - uValue;
-        registerFile.setNZP( nzp );
+        int sign = 0;
+        if( nzp < 0 )
+        {
+          sign = -1;
+        }
+        else if( nzp > 0 )
+        {
+          sign = +1;
+        }
+        registerFile.setNZP( sign );
         return n + 1;
       }
     } );
@@ -343,6 +389,105 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
+
+    ISA.createDef( "ADDU", "1011 000 ddd sss ttt ", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException
+      {
+        // Get the values to be added
+        final int sValue = registerFile.getRegister( getSReg( word ) );
+        final int tValue = registerFile.getRegister( getTReg( word ) );
+
+        // Go ahead and add themd
+        int value = sValue + tValue;
+
+        // Check the carry bit
+        if( ( value & CARRYBIT ) != 0 )
+        {
+          registerFile.setC( 1 );
+        }
+        else
+        {
+          registerFile.setC( 0 );
+        }
+
+        // Now mask off the carry bit
+        value &= SIXTEENBIT_MASK;
+
+        // Store the value away
+        registerFile.setRegister( getDReg( word ), value );
+
+        // That's it. Just step to the next instruction.
+        return pc + 1;
+      }
+
+    });
+
+    ISA.createDef( "BRc", "1011 001 ppppppppp", new InstructionDef()
+    {
+      public boolean isBranch()
+          {
+            return true;
+          }
+
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        if( registerFile.getC() )
+        {
+          return pc + 1 + this.getPCOffset( word );
+        }
+        return pc + 1;
+      }
+    } );
+
+    ISA.createDef( "BRnc", "1011 010 ppppppppp", new InstructionDef()
+    {
+      public boolean isBranch()
+      {
+        return true;
+      }
+
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        if( !registerFile.getC() )
+        {
+          return pc + 1 + this.getPCOffset( word );
+        }
+        return pc + 1;
+      }
+    } );
+
+
+    ISA.createDef( "LDU", "1011 1 ddd pppppppp", new InstructionDef()
+    {
+      public boolean isLoad()
+      {
+        return true;
+      }
+
+      public int getRefAddr( final Word word, final int n, final RegisterFile registerFile, final Memory memory ) throws IllegalMemAccessException
+      {
+        return n + 1 + this.getPCOffset( word );
+      }
+
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException
+      {
+        final int value = memory.checkAndRead( pc + 1 + this.getPCOffset( word ) ).getValue();
+        registerFile.setRegister( this.getDReg( word ), value );
+        if( value == 0 )
+        {
+          registerFile.setNZP( 0 );
+        }
+        else
+        {
+          registerFile.setNZP( 1 );
+        }
+        return pc + 1;
+      }
+
+    } );
+
+
 
     ISA.createDef( "LDI", "0010 ddd 1 pppppppp", new InstructionDef()
     {
