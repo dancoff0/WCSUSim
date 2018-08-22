@@ -54,8 +54,10 @@ public class GUI implements ActionListener, TableModelListener
   private final JFrame frame;
   private final JFileChooser objFileChooser;
   private final JFileChooser asmFileChooser;
+  private final JFileChooser diskFileChooser;
   private final JMenuBar menuBar;
   private final JMenu fileMenu;
+  private final JMenu diskMenu;
   private final JMenu aboutMenu;
   private final JMenuItem openObjItem;
   private final JMenuItem openAsmItem;
@@ -63,6 +65,13 @@ public class GUI implements ActionListener, TableModelListener
   private final JMenuItem quitItem;
   private final JMenuItem commandItem;
   private final JMenuItem versionItem;
+
+  // Items for the Disk menu
+  private final JMenuItem mountDiskItem;
+  private final JMenuItem unmountDiskItem;
+  private final String mountDiskCommand   = "Mount";
+  private final String unmountDiskCommand = "Unmount";
+
   private final String openActionCommand = "Open";
   private final String quitActionCommand = "Quit";
   private final String openCOWActionCommand = "OutputWindow";
@@ -103,11 +112,13 @@ public class GUI implements ActionListener, TableModelListener
   private String preferredOSFileLocation;
   private String preferredObjFileLocation;
   private String preferredAsmFileLocation;
+  private String preferredWFSFileLocation;
 
   // Preference keys
   private final static String OS_KEY  = "os_file";
   private final static String ASM_DIR = "asm_directory";
   private final static String OBJ_DIR = "obj_directory";
+  private final static String DISK_DIR = "wfs_directory";
 
   private void setupMemoryPanel()
   {
@@ -215,15 +226,21 @@ public class GUI implements ActionListener, TableModelListener
     this.frame = new JFrame( "WCSUSim - " + WCSUSim.version + " - " + WCSUSim.getISA() );
     this.objFileChooser = new JFileChooser( "." );
     this.asmFileChooser = new JFileChooser( "." );
-    this.menuBar = new JMenuBar();
-    this.fileMenu = new JMenu( "File" );
+    this.diskFileChooser = new JFileChooser( "." );
+
+    // Create the menus
+    this.menuBar   = new JMenuBar();
+    this.fileMenu  = new JMenu( "File" );
     this.aboutMenu = new JMenu( "About" );
-    this.openObjItem = new JMenuItem( "Load .obj File" );
-    this.openAsmItem = new JMenuItem( "Assemble .asm File" );
-    this.loadOSItem  = new JMenuItem( "Load Operating System" );
-    this.quitItem = new JMenuItem( "Quit" );
-    this.commandItem = new JMenuItem( "Open Command Output Window" );
-    this.versionItem = new JMenuItem( "Simulator Version" );
+    this.diskMenu  = new JMenu( "Disk" );
+    this.openObjItem     = new JMenuItem( "Load .obj File" );
+    this.openAsmItem     = new JMenuItem( "Assemble .asm File" );
+    this.loadOSItem      = new JMenuItem( "Load Operating System" );
+    this.quitItem        = new JMenuItem( "Quit" );
+    this.commandItem     = new JMenuItem( "Open Command Output Window" );
+    this.versionItem     = new JMenuItem( "Simulator Version" );
+    this.mountDiskItem   = new JMenuItem( "Mount a disk" );
+    this.unmountDiskItem = new JMenuItem( "Unmount disk" );
     this.leftPanel = new JPanel();
     this.controlPanel = new JPanel();
     this.nextButton = new JButton( "Step Over" );
@@ -371,9 +388,10 @@ public class GUI implements ActionListener, TableModelListener
 
     // Look up the preferences for the GUI
     Preferences guiPreferences = Preferences.userNodeForPackage( GUI.class );
-    preferredOSFileLocation  = guiPreferences.get( OS_KEY,  null );
-    preferredObjFileLocation = guiPreferences.get( OBJ_DIR, null );
-    preferredAsmFileLocation = guiPreferences.get( ASM_DIR, null );
+    preferredOSFileLocation  = guiPreferences.get( OS_KEY,   null );
+    preferredObjFileLocation = guiPreferences.get( OBJ_DIR,  null );
+    preferredAsmFileLocation = guiPreferences.get( ASM_DIR,  null );
+    preferredWFSFileLocation = guiPreferences.get( DISK_DIR, null );
 
     this.mac.setStoppedListener( this.commandPanel );
     this.objFileChooser.setFileSelectionMode( JFileChooser.FILES_AND_DIRECTORIES );
@@ -394,9 +412,34 @@ public class GUI implements ActionListener, TableModelListener
         return "*.obj";
       }
     } );
+
     if( preferredObjFileLocation != null )
     {
       objFileChooser.setCurrentDirectory( new File( preferredObjFileLocation ) );
+    }
+
+    this.diskFileChooser.setFileSelectionMode( JFileChooser.FILES_AND_DIRECTORIES );
+    this.diskFileChooser.addChoosableFileFilter( new FileFilter()
+    {
+      public boolean accept( final File file )
+      {
+        if( file.isDirectory() )
+        {
+          return true;
+        }
+        final String name = file.getName();
+        return name.toLowerCase().endsWith( ".wfs" );
+      }
+
+      public String getDescription()
+      {
+        return "*.wfs";
+      }
+    } );
+
+    if( preferredWFSFileLocation != null )
+    {
+      diskFileChooser.setCurrentDirectory( new File( preferredWFSFileLocation ) );
     }
 
     this.asmFileChooser.setFileSelectionMode( JFileChooser.FILES_AND_DIRECTORIES );
@@ -442,8 +485,19 @@ public class GUI implements ActionListener, TableModelListener
     this.fileMenu.add( this.quitItem );
     this.versionItem.setActionCommand( "Version" );
     this.versionItem.addActionListener( this );
+
+    // Disk items
+    this.mountDiskItem.setActionCommand( mountDiskCommand );
+    this.mountDiskItem.addActionListener( this );
+    this.unmountDiskItem.setActionCommand( unmountDiskCommand );
+    this.unmountDiskItem.addActionListener( this );
+    this.unmountDiskItem.setEnabled( false );
+    this.diskMenu.add( mountDiskItem );
+    this.diskMenu.add( unmountDiskItem );
+
     this.aboutMenu.add( this.versionItem );
     this.menuBar.add( this.fileMenu );
+    this.menuBar.add( diskMenu );
     this.menuBar.add( this.aboutMenu );
     this.frame.setJMenuBar( this.menuBar );
     this.setupControlPanel();
@@ -666,7 +720,33 @@ public class GUI implements ActionListener, TableModelListener
             Console.println( "Load command cancelled by user." );
           }
         }
-
+        else if( mountDiskCommand.equals( actionEvent.getActionCommand() ) )
+        {
+          if( this.diskFileChooser.showOpenDialog( this.frame ) == 0 )
+          {
+            File diskFile = this.diskFileChooser.getSelectedFile();
+            String currentDiskDirectory = diskFileChooser.getCurrentDirectory().getAbsolutePath();
+            if( !currentDiskDirectory.equals( preferredWFSFileLocation ) )
+            {
+              preferredWFSFileLocation = currentDiskDirectory;
+              Preferences guiPreferences = Preferences.userNodeForPackage( GUI.class );
+              guiPreferences.put( DISK_DIR, preferredWFSFileLocation );
+            }
+            Console.println( this.mac.mountDiskFile( diskFile ) );
+            mountDiskItem.setEnabled( false );
+            unmountDiskItem.setEnabled( true );
+          }
+          else
+          {
+            Console.println( "Mount command cancelled by user." );
+          }
+        }
+        else if( unmountDiskCommand.equals( actionEvent.getActionCommand() ) )
+        {
+          Console.println( this.mac.unmountDiskFile() );
+          mountDiskItem.setEnabled( true );
+          unmountDiskItem.setEnabled( false );
+        }
       }
     }
     catch( ExceptionException ex )
