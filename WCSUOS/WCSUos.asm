@@ -81,7 +81,7 @@
 	.FILL BAD_TRAP	; x4D
 	.FILL BAD_TRAP	; x4E
 	.FILL BAD_TRAP	; x4F
-	.FILL BAD_TRAP	; x50
+	.FILL FS_MOUNT_DISK	; x50
 	.FILL BAD_TRAP	; x51
 	.FILL BAD_TRAP	; x52
 	.FILL BAD_TRAP	; x53
@@ -1064,10 +1064,10 @@ INT_SAVE_R1 .BLKW 1
 INT_SAVE_R2 .BLKW 1
 
 ;; Interrupt vectors
-KEYBOARD_INT_VECTOR .FILL x0007
-INT_MCR	            .FILL xFFFE		; machine control register
+KEYBOARD_INT_VECTOR   .FILL x0007
+INT_MCR	              .FILL xFFFE		; machine control register
 ENABLE_INTERRUPTS_BIT .FILL x4000
-INT_MASK_HIGH_BIT   .FILL x7FFF
+INT_MASK_HIGH_BIT     .FILL x7FFF
 
 ;; Copy of the register definitions
 INT_OS_KBSR	.FILL xFE00		; keyboard status register
@@ -1197,3 +1197,252 @@ INT_KEYBOARD_RESTORE_REGISTERS
     LD R0, INT_SAVE_R0
     LD R1, INT_SAVE_R1
     RTI
+
+;; Disk Support constants
+DISK_BASE_ADDRESS     .FILL  x7000
+DISK_READ_COMMAND     .FILL  x0001
+DISK_WRITE_COMMAND    .FILL  x0002
+DISK_CLEAR_STATUS_BIT .FILL  x7FFF
+DISK_SET_STATUS_BIT   .FILL  x8000
+FS_SUCCESS            .FILL  x0001
+pDISK_INODE_MAP       .FILL  x1000
+pDISK_DATABLOCK_MAP   .BLKW  1
+pDISK_FIRST_INODE     .BLKW  1
+
+;; Disk register assignments
+OS_DDSR .FILL xFE14     ; Disk Status Register
+OS_DDCR .FILL xFE16     ; Disk Control Register
+OS_DDBR .FILL xFE18     ; Disk Block Register
+OS_DDMR .FILL xFE1A     ; Disk Memory Register
+
+;; Register storage area
+DISK_SAVE_R0 .BLKW 1
+DISK_SAVE_R1 .BLKW 1
+DISK_SAVE_R2 .BLKW 1
+DISK_SAVE_R3 .BLKW 1
+
+;; Super Block Parameters
+NUMBER_OF_INODES           .BLKW 1
+NUMBER_OF_DATABLOCKS       .BLKW 1
+ADDRESS_OF_INODE_MAP       .BLKW 1
+ADDRESS_OF_DATABLOCK_MAP   .BLKW 1
+ADDRESS_OF_FIRST_INODE     .BLKW 1
+ADDRESS_OF_FIRST_DATABLOCK .BLKW 1
+TOTAL_BLOCKS               .BLKW 1
+
+;; Read the disk's super block
+FS_MOUNT_DISK
+    ;; Save the value in R1
+    ST  R1, DISK_SAVE_R1
+    ST  R2, DISK_SAVE_R2
+    ST  R3, DISK_SAVE_R3
+
+    ;; Load the READ command into the control register
+    LD  R0, DISK_READ_COMMAND
+    STI R0, OS_DDCR
+
+    ;; Load the block address
+    CLR R0
+    STI R0, OS_DDBR
+
+    ;; Load the memory
+    LD  R0, DISK_BASE_ADDRESS
+    STI R0, OS_DDMR
+
+    ;; Clear the status bit so that the read begins
+    LDI R0, OS_DDSR
+    LD  R1, DISK_CLEAR_STATUS_BIT
+    AND R0, R0, R1
+    STI R0, OS_DDSR
+
+    ;; Wait for the status bit to be set again
+    LD  R1, DISK_SET_STATUS_BIT
+FS_MOUNT_WAIT_FOR_SUPERBLOCK_STATUS_BIT
+    LDI R0, OS_DDSR
+    AND R0, R0, R1
+    BRz FS_MOUNT_WAIT_FOR_SUPERBLOCK_STATUS_BIT
+
+    ;; Fetch the parameters
+    LD  R0, DISK_BASE_ADDRESS
+    ADD R0, R0, #7
+
+    ;;     Number of INodes
+    LDR R1, R0, #0
+    ST  R1, NUMBER_OF_INODES
+    ADD R0, R0, #4
+
+    ;;     Number of data blocks
+    LDR R1, R0, #0
+    ST  R1, NUMBER_OF_DATABLOCKS
+    ADD R0, R0, #4
+
+    ;;     Address of INode map
+    LDR R1, R0, #0
+    ST  R1, ADDRESS_OF_INODE_MAP
+    ADD R0, R0, #4
+
+    ;;     Address of Data block map
+    LDR R1, R0, #0
+    ST  R1, ADDRESS_OF_DATABLOCK_MAP
+    ADD R0, R0, #4
+
+    ;;     Address of first INode
+    LDR R1, R0, #0
+    ST  R1, ADDRESS_OF_FIRST_INODE
+    ADD R0, R0, #4
+
+    ;;     Address of first Data block
+    LDR R1, R0, #0
+    ST  R1, ADDRESS_OF_FIRST_DATABLOCK
+    ADD R0, R0, #4
+
+    ;;     Total number of blocks
+    LDR R1, R0, #0
+    ST  R1, TOTAL_BLOCKS
+
+    ;; Get the INode map
+    ;; Load the READ command into the control register
+    LD  R0, DISK_READ_COMMAND
+    STI R0, OS_DDCR
+
+    ;; Load the block address
+    LD R0, ADDRESS_OF_INODE_MAP
+    STI R0, OS_DDBR
+
+    ;; Load the memory
+    LD  R0, DISK_BASE_ADDRESS
+    STI R0, OS_DDMR
+
+    ;; Clear the status bit so that the read begins
+    LDI R0, OS_DDSR
+    LD  R1, DISK_CLEAR_STATUS_BIT
+    AND R0, R0, R1
+    STI R0, OS_DDSR
+
+    ;; Wait for the status bit to be set again
+    LD  R1, DISK_SET_STATUS_BIT
+FS_MOUNT_WAIT_FOR_INODE_MAP_STATUS_BIT
+    LDI R0, OS_DDSR
+    AND R0, R0, R1
+    BRz FS_MOUNT_WAIT_FOR_INODE_MAP_STATUS_BIT
+
+    ;; Compute the number of words needed
+    LD R0, NUMBER_OF_INODES
+    LC R1, #8
+    DIV R0, R0, R1
+
+    ;; This are the destination and source of the INode Map
+    LD R1, pDISK_INODE_MAP
+    LD R2, DISK_BASE_ADDRESS
+
+FS_MOUNT_INODE_MAP_LOOP
+    BRz FS_MOUNT_GET_DATABLOCK_MAP
+    LDR R3, R2, #0
+    STR R3, R1, #0
+    ADD R1, R1, #1
+    ADD R2, R2, #1
+    ADD R0, R0, #-1
+    BR FS_MOUNT_INODE_MAP_LOOP
+
+    ;; Similarly get the Datablock map
+FS_MOUNT_GET_DATABLOCK_MAP
+    ST R1, pDISK_DATABLOCK_MAP
+
+    ;; Load the READ command into the control register
+    LD  R0, DISK_READ_COMMAND
+    STI R0, OS_DDCR
+
+    ;; Load the block address
+    LD R0, ADDRESS_OF_DATABLOCK_MAP
+    STI R0, OS_DDBR
+
+    ;; Load the memory
+    LD  R0, DISK_BASE_ADDRESS
+    STI R0, OS_DDMR
+
+    ;; Clear the status bit so that the read begins
+    LDI R0, OS_DDSR
+    LD  R1, DISK_CLEAR_STATUS_BIT
+    AND R0, R0, R1
+    STI R0, OS_DDSR
+
+    ;; Wait for the status bit to be set again
+    LD  R1, DISK_SET_STATUS_BIT
+FS_MOUNT_WAIT_FOR_DATABLOCK_MAP_STATUS_BIT
+    LDI R0, OS_DDSR
+    AND R0, R0, R1
+    BRz FS_MOUNT_WAIT_FOR_DATABLOCK_MAP_STATUS_BIT
+
+    ;; Compute the number of words needed: Round up to the nearest multiple of 8
+    LD R0, NUMBER_OF_DATABLOCKS
+    ADD R0, R0, #7
+    LC R1, #8
+    DIV R0, R0, R1
+
+    ;; This are the destination and source of the Datablock Map
+    LD R1, pDISK_DATABLOCK_MAP
+    LD R2, DISK_BASE_ADDRESS
+
+FS_MOUNT_DATABLOCK_MAP_LOOP
+    BRz FS_MOUNT_GET_ROOT_INODE
+    LDR R3, R2, #0
+    STR R3, R1, #0
+    ADD R1, R1, #1
+    ADD R2, R2, #1
+    ADD R0, R0, #-1
+    BR FS_MOUNT_DATABLOCK_MAP_LOOP
+
+FS_MOUNT_GET_ROOT_INODE
+    ST R1, pDISK_FIRST_INODE
+
+    ;; Load the Read command
+    LD  R0, DISK_READ_COMMAND
+    STI R0, OS_DDCR
+
+    ;; Load the block address
+    LD R0, ADDRESS_OF_FIRST_INODE
+    STI R0, OS_DDBR
+
+    ;; Load the memory
+    LD  R0, DISK_BASE_ADDRESS
+    STI R0, OS_DDMR
+
+    ;; Clear the status bit so that the read begins
+    LDI R0, OS_DDSR
+    LD  R1, DISK_CLEAR_STATUS_BIT
+    AND R0, R0, R1
+    STI R0, OS_DDSR
+
+    ;; Wait for the status bit to be set again
+    LD  R1, DISK_SET_STATUS_BIT
+FS_MOUNT_WAIT_FOR_FIRST_INODE_STATUS_BIT
+    LDI R0, OS_DDSR
+    AND R0, R0, R1
+    BRz FS_MOUNT_WAIT_FOR_FIRST_INODE_STATUS_BIT
+
+    ;; This are the destination and source of the first INode
+    LD R1, pDISK_FIRST_INODE
+    LD R2, DISK_BASE_ADDRESS
+
+FS_MOUNT_FIRST_INODE_LOOP
+    BRz FS_MOUNT_GET_FIRST_DATABLOCK
+    LDR R3, R2, #0
+    STR R3, R1, #0
+    ADD R1, R1, #1
+    ADD R2, R2, #1
+    ADD R0, R0, #-1
+    BR FS_MOUNT_FIRST_INODE_LOOP
+
+FS_MOUNT_GET_FIRST_DATABLOCK
+
+    ;; Restore R1
+    LD R1, DISK_SAVE_R1
+    LD R2, DISK_SAVE_R2
+    LD R3, DISK_SAVE_R3
+
+    LD R0, FS_SUCCESS
+    RTT
+
+
+
+
