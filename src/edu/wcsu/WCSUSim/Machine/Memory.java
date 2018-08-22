@@ -1,5 +1,6 @@
 package edu.wcsu.WCSUSim.Machine;
 
+import edu.wcsu.WCSUSim.Devices.DiskDevice;
 import edu.wcsu.WCSUSim.Devices.KeyboardDevice;
 import edu.wcsu.WCSUSim.Devices.MonitorDevice;
 import edu.wcsu.WCSUSim.Devices.TimerDevice;
@@ -7,6 +8,7 @@ import edu.wcsu.WCSUSim.Display.Console;
 import edu.wcsu.WCSUSim.Exceptions.IllegalMemAccessException;
 
 import javax.swing.table.AbstractTableModel;
+import java.io.RandomAccessFile;
 
 // 
 // Decompiled by Procyon v0.5.30
@@ -26,8 +28,9 @@ public class Memory extends AbstractTableModel
 
   // Built-in devices
   private KeyboardDevice kbDevice;
-  private MonitorDevice monitorDevice;
-  private TimerDevice timerDevice;
+  private MonitorDevice  monitorDevice;
+  private TimerDevice    timerDevice;
+  private DiskDevice     diskDevice;
 
   // Device registers
   public static final int BEGIN_DEVICE_REGISTERS = 0xFE00;
@@ -41,6 +44,12 @@ public class Memory extends AbstractTableModel
   // Control registers
   public static final int OS_MPR = 0xFE12;
   public static final int OS_MCR = 0xFFFE;
+
+  // Disk registers
+  public final static int OS_DDSR = 0xFE14;  // Disk Status  Register
+  public final static int OS_DDCR = 0xFE16;  // Disk Control Register
+  public final static int OS_DDBR = 0xFE18;  // Disk Block   Register
+  public final static int OS_DDMR = 0xFE1A;  // Disk Memory  Register
 
   public static final int DISABLE_TIMER = 0;
   public static final int MANUAL_TIMER_MODE = 1;
@@ -68,9 +77,13 @@ public class Memory extends AbstractTableModel
     this.colNames = new String[]{ "BP", "Address", "Value", "Instruction" };
     this.nextBreakPoints = new boolean[65536];
     this.breakPoints = new boolean[65536];
-    this.kbDevice = new KeyboardDevice( this );
+
+    // Create the device drivers
+    this.kbDevice      = new KeyboardDevice( this );
     this.monitorDevice = new MonitorDevice();
-    this.timerDevice = new TimerDevice();
+    this.timerDevice   = new TimerDevice();
+    this.diskDevice    = new DiskDevice( this );
+
     this.machine = machine;
     for( int i = 0; i < 65536; ++i )
     {
@@ -93,6 +106,16 @@ public class Memory extends AbstractTableModel
   public MonitorDevice getMonitorDevice()
   {
     return this.monitorDevice;
+  }
+
+  public void mountDiskFile( RandomAccessFile inputFile )
+  {
+    diskDevice.mountDiskFile( inputFile );
+  }
+
+  public void unmountDiskFile()
+  {
+    diskDevice.unmountDiskFile();
   }
 
   public void reset()
@@ -379,13 +402,21 @@ public class Memory extends AbstractTableModel
       }
 
       case OS_KBSR:
-      {
+
         this.memArr[address].setValue( value );
 
         // Alert the keyboard device that its status register has just been changed
         this.kbDevice.statusRegisterUpdated();
         return;
-      }
+
+
+      case OS_DDSR:
+        this.memArr[ address ].setValue( value );
+
+        // Alert the disk device that its status register has just been changed
+        this.diskDevice.statusRegisterUpdated();
+        return;
+
       case OS_TMI:
       {
         this.timerDevice.setTimer( value );
