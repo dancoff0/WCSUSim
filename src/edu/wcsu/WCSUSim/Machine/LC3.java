@@ -44,6 +44,7 @@ public class LC3 extends ISA
       {
         final int sValue = registerFile.getRegister( getSReg( word ) );
         registerFile.setRegister( getDReg( word ), sValue );
+        registerFile.setNZP( sValue );
         return pc + 1;
 
       }
@@ -968,6 +969,7 @@ public class LC3 extends ISA
     ISA.createDef( "FS_OPEN_READ_FILE",     "1111 0000 01010011", new TrapDef() );
     ISA.createDef( "FS_FIND_INODE",         "1111 0000 01010100", new TrapDef() );
     ISA.createDef( "FS_STRING_LENGTH",      "1111 0000 01010101", new TrapDef() );
+    ISA.createDef( "FS_READ",               "1111 0000 01010110", new TrapDef() );
     ISA.createDef( "TRAP",                  "1111 0000 uuuuuuuu", new TrapDef() );
 
   }

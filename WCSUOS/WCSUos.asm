@@ -87,7 +87,7 @@
 	.FILL TRAP_OPEN_READ_FILE     ; x53
 	.FILL TRAP_FIND_INODE	      ; x54
 	.FILL TRAP_FIND_STRING_LENGTH ; x55
-	.FILL BAD_TRAP	; x56
+	.FILL TRAP_READ_FILE       	  ; x56
 	.FILL BAD_TRAP	; x57
 	.FILL BAD_TRAP	; x58
 	.FILL BAD_TRAP	; x59
@@ -1462,6 +1462,12 @@ READ_SAVE_R2  .BLKW 1
 READ_SAVE_R3  .BLKW 1
 READ_SAVE_R4  .BLKW 1
 READ_SAVE_R5  .BLKW 1
+READ_SAVE_R6  .BLKW 1
+
+;; Management of File descriptors
+FILE_DESCRIPTOR .FILL xB000
+FS_USER_READ_DATABLOCK .FILL x8000
+
 ;; Open a file in the attached, mounted file system
 ;;   Register usage:
 ;;      On Entry
@@ -1477,6 +1483,7 @@ TRAP_OPEN_READ_FILE
     ST R3, READ_SAVE_R3
     ST R4, READ_SAVE_R4
     ST R5, READ_SAVE_R5
+    ST R6, READ_SAVE_R6
 
     ;; Compute the length of the file path
     FS_STRING_LENGTH
@@ -1494,7 +1501,7 @@ TRAP_OPEN_READ_FILE
 FS_OPEN_READ_FILE_COMPONENT_LOOP
     ;; See if we are done
     CMP R1, R4
-    BRzp FS_OPEN_READ_FILE_DONE
+    BRzp FS_OPEN_READ_FILE_CREATE_DESCRIPTOR
 
     ;; The file path must begin with a '/'. Skip over it.
     ADD R1, R1, #1
@@ -1516,9 +1523,74 @@ FS_OPEN_READ_FILE_PARSE_LOOP
 
 FS_OPEN_READ_FILE_PARSE_DONE
     FS_FIND_INODE
+    ;; The Result INode number is R3. Make sure it is sensible
+    CMPi R3, #0
+    BRn FS_OPEN_READ_FILE_DONE
+
     ;; Copy R2 to R1 to continue
     CPR R1, R2
     BR FS_OPEN_READ_FILE_COMPONENT_LOOP
+
+FS_OPEN_READ_FILE_CREATE_DESCRIPTOR
+    ;; We found the INode of the file to read
+    ;; Create a descriptor and return that
+    ;; First read in the INode
+    ;; Load the INode
+    ;; Load the block address of the first INode and ...
+    LD R0, FIRST_INODE_BLOCK
+
+    ;; ... update it with the the number of the desired INode
+    LD  R4, FS_INODES_PER_BLOCK
+    DIV R5, R3, R4
+    ADD R0, R0, R5
+
+    ;; ... read it in
+    FS_RAW_READ
+
+    ;; Load the number of words needed:
+    LD R0, FS_WORDS_PER_INODE
+
+    ;; This are the destination and source of the desired INode
+    LD  R1, FS_FREE_SPACE
+    ADD R1, R0, R1
+    LD  R6, FILE_DESCRIPTOR
+    STR R1, R6, #0
+
+    ;; R1 now points just after the temp INode space.
+    LD R2, FS_BASE_ADDRESS
+    CPR R4, R3
+    MUL R4, R4, R0  ;; R4 now contains the offset to the desired INode
+    ADD R2, R2, R4
+
+    FS_COPY_WORDS
+
+    ;; Get the first direct pointer and ...
+    LDR R1, R6, #0    ;; Restore R1: copy_words changes it
+    LDR R3, R1, #14   ;; Second to last byte
+    SHFLi R3, R3, #4
+    SHFLi R3, R3, #4
+    LDR R2, R1, #15   ;; Last byte
+    OR  R0, R3, R2
+
+    ;; ... read in that block
+    FS_RAW_READ
+
+    ;; This is a full block
+    LD R0, FS_BLOCK_SIZE
+
+    ;; This are the destination and source of the first Datablock
+    LD  R1, FS_USER_READ_DATABLOCK
+    LD  R2, FS_BASE_ADDRESS
+    STR R1, R6, #1  ;; Store the address of the datablock in the descriptor
+
+    FS_COPY_WORDS
+
+    ;; Finish the descriptor
+    CLR  R1
+    STR  R1, R6, #2  ;; Datablock offset
+    STR  R1, R6, #3  ;; Read location (high word)
+    STR  R1, R6, #4  ;; Read location (low word)
+    CPR  R3, R6
 
 FS_OPEN_READ_FILE_DONE
     ;; Save the INode
@@ -1530,8 +1602,100 @@ FS_OPEN_READ_FILE_DONE
     LD R3, READ_SAVE_R3
     LD R4, READ_SAVE_R4
     LD R5, READ_SAVE_R5
+    LD R6, READ_SAVE_R6
 
     ;; That's it
+    RTT
+
+READ_WORDS_LEFT_IN_FILE .BLKW 1
+READ_BLOCK_SIZE         .FILL #4096
+;; Read an already open file
+;;   Register Usage
+;;     On Entry
+;;        R0: File descriptor   (unchanged)
+;;        R1: Address of buffer (unchanged)
+;;        R2: length of buffer  (unchanged)
+;;     On Exit
+;;        R3: bytes read
+TRAP_READ_FILE
+    ST R1, READ_SAVE_R1
+    ST R2, READ_SAVE_R2
+    ST R4, READ_SAVE_R4
+    ST R5, READ_SAVE_R5
+    ST R6, READ_SAVE_R6
+
+    ;; Get the size of the file
+    LDR R4, R0, #0   ;; Address of the INode
+    LDR R5, R4, #2   ;; Second to last byte
+    SHFLi R5, R5, #4
+    SHFLi R5, R5, #4
+    LDR R6, R4, #3   ;; Last byte
+    OR  R5, R5, R6   ;; R5 now contains the file size
+
+    ;; Now get read location
+    LDR R4, R0, #4   ;; Low word of the read location
+
+    ;; Compare these: make sure there are still words left to read
+    CMP R4, R5
+    BRn TRAP_READ_FILE_WORDS_LEFT
+    LC R3, #-1
+    BR TRAP_READ_FILE_DONE
+
+TRAP_READ_FILE_WORDS_LEFT
+    SUB R5, R5, R4   ;; R5 now contains the number of words left
+    CPR R6, R5
+    ST  R5, READ_WORDS_LEFT_IN_FILE
+
+    ;; Compute the number of words left in the current data block
+    LDR R4, R0, #2    ;; R4 now contains the datablock offset
+    LD  R5, READ_BLOCK_SIZE
+    SUB R5, R5, R4    ;; R5 is now the number of words left in this data block
+
+    ;; Compare the size of the buffer and the number of words left.
+    ;; Take the smaller of the two.
+    CMP R5, R2
+    BRzp TRAP_READ_FILE_COMPARE_WORDS_LEFT
+    CPR R2, R5
+
+    ;; Now compare to the number of words left in the file, and take the smaller
+TRAP_READ_FILE_COMPARE_WORDS_LEFT
+    CMP R2, R6
+    BRnz TRAP_READ_FILE_COPY_WORDS
+    CPR R2, R6
+
+TRAP_READ_FILE_COPY_WORDS
+    LDR R5, R0, #1   ;; This is the address of the data block
+    ADD R4, R5, R4   ;; Add the datablock offset
+    CLR R3
+    CPR R2, R2   ;; Set the NZP bits
+
+TRAP_READ_FILE_COPY_WORDS_LOOP
+    BRz TRAP_READ_UPDATE_DESCRIPTOR
+    LDR R5, R4, #0
+    STR R5, R1, #0
+    ADD R1, R1, #1
+    ADD R4, R4, #1
+    ADD R3, R3, #1
+    ADD R2, R2, #-1
+    BR TRAP_READ_FILE_COPY_WORDS_LOOP
+
+TRAP_READ_UPDATE_DESCRIPTOR
+    ;; Get the datablock offset
+    LDR R5, R0, #2
+    ADD R5, R5, R3  ;; Add the number of words just read
+    STR R5, R0, #2
+
+    ;; Get the read location
+    LDR R5, R0, #4
+    ADD R5, R5, R3  ;; Add the number of words just read
+    STR R5, R0, #4
+
+TRAP_READ_FILE_DONE
+    LD R1, READ_SAVE_R1
+    LD R2, READ_SAVE_R2
+    LD R4, READ_SAVE_R4
+    LD R5, READ_SAVE_R5
+    LD R6, READ_SAVE_R6
     RTT
 
 FIND_INODE_SAVE_R0 .BLKW 1
@@ -1539,7 +1703,10 @@ FIND_INODE_SAVE_R1 .BLKW 1
 FIND_INODE_SAVE_R2 .BLKW 1
 FIND_INODE_SAVE_R4 .BLKW 1
 FIND_INODE_SAVE_R5 .BLKW 1
+FIND_INODE_SAVE_R6 .BLKW 1
+
 FIND_INODE_RECORDLEN .BLKW 1
+FIND_INODE_NAMELEN   .BLKW 1
 FIRST_INODE_BLOCK  .FILL 3
 FS_INODES_PER_BLOCK           .FILL  #128
 FS_WORDS_PER_INODE            .FILL  #32
@@ -1563,6 +1730,7 @@ TRAP_FIND_INODE
     ST R2, FIND_INODE_SAVE_R2
     ST R4, FIND_INODE_SAVE_R4
     ST R5, FIND_INODE_SAVE_R5
+    ST R6, FIND_INODE_SAVE_R6
 
     ;; Load the INode
     ;; Load the block address of the first INode and ...
@@ -1615,6 +1783,7 @@ TRAP_FIND_INODE
     LD R2, FIND_INODE_SAVE_R2
 
     LD R4, FS_FIRST_DIRECTORY_DATA_BLOCK
+    LC R6, #-1     ;; -1 is a failure code indicating that we couldn't find the INode!
 FIND_INODE_DATA_BLOCK_LOOP
     ;; Get the record length
     LDR R5, R4, #4
@@ -1624,7 +1793,7 @@ FIND_INODE_DATA_BLOCK_LOOP
     OR R5, R3, R5  ;; R5 Now contains the record length
     ;; Make sure this is not zero
     BRp FIND_INODE_COMPARE_ENTRY_NAME_LENGTH
-    LC R3, #-1     ;; -1 is a failure code indicating that we couldn't find the INode!
+
     BR FIND_INODE_DONE
 
 FIND_INODE_COMPARE_ENTRY_NAME_LENGTH
@@ -1635,6 +1804,7 @@ FIND_INODE_COMPARE_ENTRY_NAME_LENGTH
     SHFLi R5, R5, #4
     LDR R3, R4, #7
     OR R5, R3, R5 ;; R5 now contains the name length
+    ST R5, FIND_INODE_NAMELEN
 
     ;; Compare this length with the length of our path component
     ADD R5, R5, #-1 ;; Subtract the space for the '\0'
@@ -1644,21 +1814,53 @@ FIND_INODE_COMPARE_ENTRY_NAME_LENGTH
 
     ;; The names have the same length, so we need to compare them character by character
     ;;      Loop over the characters
+    LD  R1, FIND_INODE_SAVE_R1
+    ADD R3, R4, #8
+    LD  R5, FIND_INODE_NAMELEN
+    ;; Subtract one for the '\0'.
+    ;; This will be in the directory block, but not necessarily in the path component.
+    ADD R5, R5, #-1
+
+FIND_INODE_COMPARE_NAMES_LOOP
+    BRz FIND_INODE_NAMES_MATCH
+    ;; Load in the character from the Directory Data Block
+    LDR R2, R3, #0
+
+    ;; Load in the character from the path component
+    LDR R0, R1, #0
+
+    ;; Compare them
+    CMP R2, R0
+    BRnp FIND_INODE_NAMES_DONT_MATCH
+
+    ;; Go on the the next character
+    ADD R1, R1, #1
+    ADD R3, R3, #1
+    ADD R5, R5, #-1
+    BR FIND_INODE_COMPARE_NAMES_LOOP
+
+FIND_INODE_NAMES_MATCH
+    ;; Look up the INode number
+    LDR   R5, R4, #2
+    SHFli R5, R5, #4
+    SHFLi R5, R5, #4
+    LDR   R3, R4, #3
+    OR    R6, R5, R3   ;; R6 contains the INode number
+    BR FIND_INODE_DONE
 
 FIND_INODE_NAMES_DONT_MATCH
     LD R5, FIND_INODE_RECORDLEN
     ADD R4, R4, R5
     BR FIND_INODE_DATA_BLOCK_LOOP
 
-
-
-    ;; Get the INode number
 FIND_INODE_DONE
+    CPR R3, R6
     LD R0, FIND_INODE_SAVE_R0
     LD R1, FIND_INODE_SAVE_R1
     LD R2, FIND_INODE_SAVE_R2
     LD R4, FIND_INODE_SAVE_R4
     LD R5, FIND_INODE_SAVE_R5
+    LD R6, FIND_INODE_SAVE_R6
     RTT
 
 
