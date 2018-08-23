@@ -81,12 +81,12 @@
 	.FILL BAD_TRAP	; x4D
 	.FILL BAD_TRAP	; x4E
 	.FILL BAD_TRAP	; x4F
-	.FILL FS_MOUNT_DISK	; x50
-	.FILL BAD_TRAP	; x51
-	.FILL BAD_TRAP	; x52
-	.FILL BAD_TRAP	; x53
-	.FILL BAD_TRAP	; x54
-	.FILL BAD_TRAP	; x55
+	.FILL TRAP_MOUNT_DISK         ; x50
+	.FILL TRAP_RAW_READ	          ; x51
+	.FILL TRAP_COPY_WORDS         ; x52
+	.FILL TRAP_OPEN_READ_FILE     ; x53
+	.FILL TRAP_FIND_INODE	      ; x54
+	.FILL TRAP_FIND_STRING_LENGTH ; x55
 	.FILL BAD_TRAP	; x56
 	.FILL BAD_TRAP	; x57
 	.FILL BAD_TRAP	; x58
@@ -1204,10 +1204,15 @@ DISK_READ_COMMAND     .FILL  x0001
 DISK_WRITE_COMMAND    .FILL  x0002
 DISK_CLEAR_STATUS_BIT .FILL  x7FFF
 DISK_SET_STATUS_BIT   .FILL  x8000
+DISK_WORDS_PER_INODE  .FILL  #32
+DISK_BLOCK_SIZE       .FILL  #4096
+
 FS_SUCCESS            .FILL  x0001
-pDISK_INODE_MAP       .FILL  x1000
-pDISK_DATABLOCK_MAP   .BLKW  1
-pDISK_FIRST_INODE     .BLKW  1
+pDISK_INODE_MAP                 .FILL  x1000
+pDISK_DATABLOCK_MAP             .BLKW  1
+pDISK_FIRST_INODE               .BLKW  1
+pDISK_FREE_SPACE                .BLKW  1
+pDISK_FIRST_DIRECTORY_DATABLOCK .FILL x2000
 
 ;; Disk register assignments
 OS_DDSR .FILL xFE14     ; Disk Status Register
@@ -1220,6 +1225,8 @@ DISK_SAVE_R0 .BLKW 1
 DISK_SAVE_R1 .BLKW 1
 DISK_SAVE_R2 .BLKW 1
 DISK_SAVE_R3 .BLKW 1
+DISK_SAVE_R4 .BLKW 1
+DISK_SAVE_R5 .BLKW 1
 
 ;; Super Block Parameters
 NUMBER_OF_INODES           .BLKW 1
@@ -1231,40 +1238,21 @@ ADDRESS_OF_FIRST_DATABLOCK .BLKW 1
 TOTAL_BLOCKS               .BLKW 1
 
 ;; Read the disk's super block
-FS_MOUNT_DISK
+TRAP_MOUNT_DISK
     ;; Save the value in R1
     ST  R1, DISK_SAVE_R1
     ST  R2, DISK_SAVE_R2
     ST  R3, DISK_SAVE_R3
 
-    ;; Load the READ command into the control register
-    LD  R0, DISK_READ_COMMAND
-    STI R0, OS_DDCR
-
-    ;; Load the block address
+    ;; Load the block address, 0 in this case for the Super Block and ...
     CLR R0
-    STI R0, OS_DDBR
 
-    ;; Load the memory
-    LD  R0, DISK_BASE_ADDRESS
-    STI R0, OS_DDMR
-
-    ;; Clear the status bit so that the read begins
-    LDI R0, OS_DDSR
-    LD  R1, DISK_CLEAR_STATUS_BIT
-    AND R0, R0, R1
-    STI R0, OS_DDSR
-
-    ;; Wait for the status bit to be set again
-    LD  R1, DISK_SET_STATUS_BIT
-FS_MOUNT_WAIT_FOR_SUPERBLOCK_STATUS_BIT
-    LDI R0, OS_DDSR
-    AND R0, R0, R1
-    BRz FS_MOUNT_WAIT_FOR_SUPERBLOCK_STATUS_BIT
+    ;; ... read it in.
+    FS_RAW_READ
 
     ;; Fetch the parameters
     LD  R0, DISK_BASE_ADDRESS
-    ADD R0, R0, #7
+    ADD R0, R0, #7    ;; Skip over the 'magic' and first 3 bytes of the number of INodes
 
     ;;     Number of INodes
     LDR R1, R0, #0
@@ -1301,30 +1289,11 @@ FS_MOUNT_WAIT_FOR_SUPERBLOCK_STATUS_BIT
     ST  R1, TOTAL_BLOCKS
 
     ;; Get the INode map
-    ;; Load the READ command into the control register
-    LD  R0, DISK_READ_COMMAND
-    STI R0, OS_DDCR
-
-    ;; Load the block address
+    ;; Load the block address and ...
     LD R0, ADDRESS_OF_INODE_MAP
-    STI R0, OS_DDBR
 
-    ;; Load the memory
-    LD  R0, DISK_BASE_ADDRESS
-    STI R0, OS_DDMR
-
-    ;; Clear the status bit so that the read begins
-    LDI R0, OS_DDSR
-    LD  R1, DISK_CLEAR_STATUS_BIT
-    AND R0, R0, R1
-    STI R0, OS_DDSR
-
-    ;; Wait for the status bit to be set again
-    LD  R1, DISK_SET_STATUS_BIT
-FS_MOUNT_WAIT_FOR_INODE_MAP_STATUS_BIT
-    LDI R0, OS_DDSR
-    AND R0, R0, R1
-    BRz FS_MOUNT_WAIT_FOR_INODE_MAP_STATUS_BIT
+    ;; ... read it in
+    FS_RAW_READ
 
     ;; Compute the number of words needed
     LD R0, NUMBER_OF_INODES
@@ -1335,43 +1304,16 @@ FS_MOUNT_WAIT_FOR_INODE_MAP_STATUS_BIT
     LD R1, pDISK_INODE_MAP
     LD R2, DISK_BASE_ADDRESS
 
-FS_MOUNT_INODE_MAP_LOOP
-    BRz FS_MOUNT_GET_DATABLOCK_MAP
-    LDR R3, R2, #0
-    STR R3, R1, #0
-    ADD R1, R1, #1
-    ADD R2, R2, #1
-    ADD R0, R0, #-1
-    BR FS_MOUNT_INODE_MAP_LOOP
+    FS_COPY_WORDS
 
     ;; Similarly get the Datablock map
-FS_MOUNT_GET_DATABLOCK_MAP
     ST R1, pDISK_DATABLOCK_MAP
 
-    ;; Load the READ command into the control register
-    LD  R0, DISK_READ_COMMAND
-    STI R0, OS_DDCR
-
-    ;; Load the block address
+    ;; Load the block address of the Datablock map and ...
     LD R0, ADDRESS_OF_DATABLOCK_MAP
-    STI R0, OS_DDBR
 
-    ;; Load the memory
-    LD  R0, DISK_BASE_ADDRESS
-    STI R0, OS_DDMR
-
-    ;; Clear the status bit so that the read begins
-    LDI R0, OS_DDSR
-    LD  R1, DISK_CLEAR_STATUS_BIT
-    AND R0, R0, R1
-    STI R0, OS_DDSR
-
-    ;; Wait for the status bit to be set again
-    LD  R1, DISK_SET_STATUS_BIT
-FS_MOUNT_WAIT_FOR_DATABLOCK_MAP_STATUS_BIT
-    LDI R0, OS_DDSR
-    AND R0, R0, R1
-    BRz FS_MOUNT_WAIT_FOR_DATABLOCK_MAP_STATUS_BIT
+    ;; ... read it in
+    FS_RAW_READ
 
     ;; Compute the number of words needed: Round up to the nearest multiple of 8
     LD R0, NUMBER_OF_DATABLOCKS
@@ -1383,66 +1325,367 @@ FS_MOUNT_WAIT_FOR_DATABLOCK_MAP_STATUS_BIT
     LD R1, pDISK_DATABLOCK_MAP
     LD R2, DISK_BASE_ADDRESS
 
-FS_MOUNT_DATABLOCK_MAP_LOOP
-    BRz FS_MOUNT_GET_ROOT_INODE
-    LDR R3, R2, #0
-    STR R3, R1, #0
-    ADD R1, R1, #1
-    ADD R2, R2, #1
-    ADD R0, R0, #-1
-    BR FS_MOUNT_DATABLOCK_MAP_LOOP
+    FS_COPY_WORDS
 
-FS_MOUNT_GET_ROOT_INODE
+    ;; Now read in the first INode
     ST R1, pDISK_FIRST_INODE
 
-    ;; Load the Read command
-    LD  R0, DISK_READ_COMMAND
-    STI R0, OS_DDCR
-
-    ;; Load the block address
+    ;; Load the block address of the first INode and ...
     LD R0, ADDRESS_OF_FIRST_INODE
-    STI R0, OS_DDBR
 
-    ;; Load the memory
-    LD  R0, DISK_BASE_ADDRESS
-    STI R0, OS_DDMR
+    ;; ... read it in
+    FS_RAW_READ
 
-    ;; Clear the status bit so that the read begins
-    LDI R0, OS_DDSR
-    LD  R1, DISK_CLEAR_STATUS_BIT
-    AND R0, R0, R1
-    STI R0, OS_DDSR
-
-    ;; Wait for the status bit to be set again
-    LD  R1, DISK_SET_STATUS_BIT
-FS_MOUNT_WAIT_FOR_FIRST_INODE_STATUS_BIT
-    LDI R0, OS_DDSR
-    AND R0, R0, R1
-    BRz FS_MOUNT_WAIT_FOR_FIRST_INODE_STATUS_BIT
+    ;; Load the number of words needed:
+    LD R0, DISK_WORDS_PER_INODE
 
     ;; This are the destination and source of the first INode
     LD R1, pDISK_FIRST_INODE
     LD R2, DISK_BASE_ADDRESS
 
-FS_MOUNT_FIRST_INODE_LOOP
-    BRz FS_MOUNT_GET_FIRST_DATABLOCK
-    LDR R3, R2, #0
-    STR R3, R1, #0
-    ADD R1, R1, #1
-    ADD R2, R2, #1
-    ADD R0, R0, #-1
-    BR FS_MOUNT_FIRST_INODE_LOOP
+    FS_COPY_WORDS
 
-FS_MOUNT_GET_FIRST_DATABLOCK
+    ;; The root INode will always have at least one directory data block allocated
+    ;; If nothing else, it will contain a link to "."
+    ST R1, pDISK_FREE_SPACE
 
-    ;; Restore R1
+    ;; Get the first direct pointer and ...
+    LD  R0, pDISK_FIRST_INODE
+    LDR R1, R0, #14   ;; Second to last byte
+    LC  R2, #8
+    SHFL R1, R1, R2   ;; R1 now contains the high byte
+    LDR R2, R0, #15   ;; Last byte
+    OR  R0, R1, R2
+
+    ;; ... read in that block
+    FS_RAW_READ
+
+    ;; This is a full block
+    LD R0, DISK_BLOCK_SIZE
+
+    ;; This are the destination and source of the first Directory Datablock
+    LD R1, pDISK_FIRST_DIRECTORY_DATABLOCK
+    LD R2, DISK_BASE_ADDRESS
+
+    FS_COPY_WORDS
+
+    ;; Restore the registers
+FS_MOUNT_DONE
     LD R1, DISK_SAVE_R1
     LD R2, DISK_SAVE_R2
     LD R3, DISK_SAVE_R3
 
+    ;; Set the success code
     LD R0, FS_SUCCESS
+    RTT
+
+;; Read one block from the external disk and place the contents into
+;; the first page of file system storage
+;;     Register usage:
+;;          On entry, R0 contains the block number to be read
+TRAP_RAW_READ
+    ST R0, DISK_SAVE_R0
+    ST R1, DISK_SAVE_R1
+
+    ;; Load the block address into the block register
+    STI R0, OS_DDBR
+
+    ;; Load the READ command in the control register
+    LD R0, DISK_READ_COMMAND
+    STI R0, OS_DDCR
+
+    ;; Load the address of the first page of FS storage into the memory register
+    LD R0, DISK_BASE_ADDRESS
+    STI R0, OS_DDMR
+
+    ;; Clear the READY bit in the status register so the read begins
+    LDI R0, OS_DDSR
+    LD R1, DISK_CLEAR_STATUS_BIT
+    AND R0, R0, R1
+    STI R0, OS_DDSR
+
+    ;; Now wait for the READY bit to be set again.
+    ;; This indicates that the READ is finished
+    LD R1, DISK_SET_STATUS_BIT
+FS_RAWREAD_WAIT_FOR_STATUS_LOOP
+    LDI R0, OS_DDSR
+    AND R0, R0, R1
+    BRz FS_RAWREAD_WAIT_FOR_STATUS_LOOP
+
+    ;; We're done. Restore the registers
+    LD R0, DISK_SAVE_R0
+    LD R1, DISK_SAVE_R1
+
+    ;; That's it!
+    RTT
+
+;; Copy a number of words from a source location to a destination location
+;;   Register usage
+;;   On Entry
+;;      R0: number of words to copy  (unchanged)
+;;      R1: destination address (changed)
+;;      R2: source address (unchanged)
+;;   On Exit
+;;      R1: next destination address
+;;   Temporary
+;;      R3
+TRAP_COPY_WORDS
+    ST R0, DISK_SAVE_R0
+    ST R2, DISK_SAVE_R2
+    ST R3, DISK_SAVE_R3
+
+    ;; Copy R0 to itself so that the CC register is set appropriately
+    CPR R0, R0
+
+TRAP_COPY_WORDS_LOOP
+    BRz TRAP_COPY_WORDS_DONE
+    LDR R3, R2, #0    ;; Get the source word and ...
+    STR R3, R1, #0    ;; ... store it at the destination address
+    ADD R1, R1, #1
+    ADD R2, R2, #1
+    ADD R0, R0, #-1
+    BR TRAP_COPY_WORDS_LOOP
+
+TRAP_COPY_WORDS_DONE
+    ;; Restore the registers
+    LD R0, DISK_SAVE_R0
+    LD R2, DISK_SAVE_R2
+    LD R3, DISK_SAVE_R3
+
+    ;; That's it
+    RTT
+
+
+pReadFilePath .BLKW 1
+READ_SAVE_R1  .BLKW 1
+READ_SAVE_R2  .BLKW 1
+READ_SAVE_R3  .BLKW 1
+READ_SAVE_R4  .BLKW 1
+READ_SAVE_R5  .BLKW 1
+;; Open a file in the attached, mounted file system
+;;   Register usage:
+;;      On Entry
+;;        R0:  a zero terminated string containing the path to the file
+;;      On exit
+;;        R0:  the INode corresponding to this file
+
+TRAP_OPEN_READ_FILE
+    ;;Save the file path
+    ST R0, pReadFilePath
+    ST R1, READ_SAVE_R1
+    ST R2, READ_SAVE_R2
+    ST R3, READ_SAVE_R3
+    ST R4, READ_SAVE_R4
+    ST R5, READ_SAVE_R5
+
+    ;; Compute the length of the file path
+    FS_STRING_LENGTH
+
+    ;; Now use this to compute the address of the end of the string
+    CPR R4, R0
+    LD R0, pReadFilePath
+    ADD R4, R4, R0
+    CPR R1, R0
+
+    ;; Now R1 contains the address of the beginning of the string
+    ;; and R4 contains the address of the end
+    ;; Look up the INode corresponding to this file
+    CLR R3 ;; Start initially at the Root Inode, namely 0
+FS_OPEN_READ_FILE_COMPONENT_LOOP
+    ;; See if we are done
+    CMP R1, R4
+    BRzp FS_OPEN_READ_FILE_DONE
+
+    ;; The file path must begin with a '/'. Skip over it.
+    ADD R1, R1, #1
+
+    ;; Now see if there is another slash
+    CPR R2, R1
+FS_OPEN_READ_FILE_PARSE_LOOP
+    ;; Check if R2 points to a '/' character
+    LDR R5, R2, #0
+    CMPi R5, x2F ;; The '/' character
+    BRz FS_OPEN_READ_FILE_PARSE_DONE
+    ;; Check if R2 points to the end of the string
+    CMP R2, R4
+    BRz FS_OPEN_READ_FILE_PARSE_DONE
+
+    ;; Otherwise, advance to the next character
+    ADD  R2, R2, #1
+    BR FS_OPEN_READ_FILE_PARSE_LOOP
+
+FS_OPEN_READ_FILE_PARSE_DONE
+    FS_FIND_INODE
+    ;; Copy R2 to R1 to continue
+    CPR R1, R2
+    BR FS_OPEN_READ_FILE_COMPONENT_LOOP
+
+FS_OPEN_READ_FILE_DONE
+    ;; Save the INode
+    CPR R0, R3
+
+    ;; Restore the registers
+    LD R1, READ_SAVE_R1
+    LD R2, READ_SAVE_R2
+    LD R3, READ_SAVE_R3
+    LD R4, READ_SAVE_R4
+    LD R5, READ_SAVE_R5
+
+    ;; That's it
+    RTT
+
+FIND_INODE_SAVE_R0 .BLKW 1
+FIND_INODE_SAVE_R1 .BLKW 1
+FIND_INODE_SAVE_R2 .BLKW 1
+FIND_INODE_SAVE_R4 .BLKW 1
+FIND_INODE_SAVE_R5 .BLKW 1
+FIND_INODE_RECORDLEN .BLKW 1
+FIRST_INODE_BLOCK  .FILL 3
+FS_INODES_PER_BLOCK           .FILL  #128
+FS_WORDS_PER_INODE            .FILL  #32
+FS_FREE_SPACE                 .FILL  x1038  ;; Root INode is stored at x1018
+FS_FIRST_DIRECTORY_DATA_BLOCK .FILL x2000
+FS_BASE_ADDRESS               .FILL x7000
+FS_BLOCK_SIZE                 .FILL #4096
+
+;; Find the INode corresponding to a given file
+;;   Register usage:
+;;      On Entry
+;;        R0:  a zero terminated string containing the path to a file
+;;        R1:  the position of the starting character of the path component
+;;        R2:  the position of the ending character of the path component
+;;        R3:  the INode containing the file component
+;;      On exit
+;;        R3:  the INode corresponding to this path component
+TRAP_FIND_INODE
+    ST R0, FIND_INODE_SAVE_R0
+    ST R1, FIND_INODE_SAVE_R1
+    ST R2, FIND_INODE_SAVE_R2
+    ST R4, FIND_INODE_SAVE_R4
+    ST R5, FIND_INODE_SAVE_R5
+
+    ;; Load the INode
+    ;; Load the block address of the first INode and ...
+    LD R0, FIRST_INODE_BLOCK
+
+    ;; ... update it with the the number of the desired INode
+    LD  R4, FS_INODES_PER_BLOCK
+    DIV R5, R3, R4
+    ADD R0, R0, R5
+
+    ;; ... read it in
+    FS_RAW_READ
+
+    ;; Load the number of words needed:
+    LD R0, FS_WORDS_PER_INODE
+
+    ;; This are the destination and source of the desired INode
+    LD R1, FS_FREE_SPACE
+    LD R2, FS_BASE_ADDRESS
+    CPR R4, R3
+    MUL R4, R4, R0  ;; R4 now contains the offset to the desired INode
+    ADD R2, R2, R4
+
+    FS_COPY_WORDS
+
+    ;; Get the first direct pointer and ...
+    LD  R0, FS_FREE_SPACE
+    LDR R1, R0, #14   ;; Second to last byte
+    LC  R2, #8
+    SHFL R1, R1, R2   ;; R1 now contains the high byte
+    LDR R2, R0, #15   ;; Last byte
+    OR  R0, R1, R2
+
+    ;; ... read in that block
+    FS_RAW_READ
+
+    ;; This is a full block
+    LD R0, FS_BLOCK_SIZE
+
+    ;; This are the destination and source of the first Directory Datablock
+    LD R1, FS_FIRST_DIRECTORY_DATA_BLOCK
+    LD R2, FS_BASE_ADDRESS
+
+    FS_COPY_WORDS
+
+    ;; Loop through the entries looking for our file
+    ;; Reload the registers
+    LD R0, FIND_INODE_SAVE_R0
+    LD R1, FIND_INODE_SAVE_R1
+    LD R2, FIND_INODE_SAVE_R2
+
+    LD R4, FS_FIRST_DIRECTORY_DATA_BLOCK
+FIND_INODE_DATA_BLOCK_LOOP
+    ;; Get the record length
+    LDR R5, R4, #4
+    SHFli R5, R5, #4
+    SHFLi R5, R5, #4
+    LDR R3, R4, #5
+    OR R5, R3, R5  ;; R5 Now contains the record length
+    ;; Make sure this is not zero
+    BRp FIND_INODE_COMPARE_ENTRY_NAME_LENGTH
+    LC R3, #-1     ;; -1 is a failure code indicating that we couldn't find the INode!
+    BR FIND_INODE_DONE
+
+FIND_INODE_COMPARE_ENTRY_NAME_LENGTH
+    ST R5, FIND_INODE_RECORDLEN
+    ;; Get the name length
+    LDR R5, R4, #6
+    SHFli R5, R5, #4
+    SHFLi R5, R5, #4
+    LDR R3, R4, #7
+    OR R5, R3, R5 ;; R5 now contains the name length
+
+    ;; Compare this length with the length of our path component
+    ADD R5, R5, #-1 ;; Subtract the space for the '\0'
+    ADD R5, R5, R1  ;; Add the starting address
+    SUB R5, R5, R2  ;; Subtract the ending address
+    BRnp FIND_INODE_NAMES_DONT_MATCH
+
+    ;; The names have the same length, so we need to compare them character by character
+    ;;      Loop over the characters
+
+FIND_INODE_NAMES_DONT_MATCH
+    LD R5, FIND_INODE_RECORDLEN
+    ADD R4, R4, R5
+    BR FIND_INODE_DATA_BLOCK_LOOP
+
+
+
+    ;; Get the INode number
+FIND_INODE_DONE
+    LD R0, FIND_INODE_SAVE_R0
+    LD R1, FIND_INODE_SAVE_R1
+    LD R2, FIND_INODE_SAVE_R2
+    LD R4, FIND_INODE_SAVE_R4
+    LD R5, FIND_INODE_SAVE_R5
     RTT
 
 
 
+STR_SAVE_R1 .BLKW 1
+STR_SAVE_R2 .BLKW 1
+STR_SAVE_R3 .BLKW 1
 
+TRAP_FIND_STRING_LENGTH
+    ST R1, STR_SAVE_R1
+    ST R2, STR_SAVE_R2
+    ST R3, STR_SAVE_R3
+
+    ;; R2 contains the number of characters
+    CLR R2
+
+FS_FIND_STRING_LENGTH_LOOP
+    LDR R1, R0, #0
+    CMPi R1, #0
+    BRz FS_FIND_STRING_LENGTH_DONE
+    ADD R2, R2, #1
+    ADD R0, R0, #1
+    BR FS_FIND_STRING_LENGTH_LOOP
+
+FS_FIND_STRING_LENGTH_DONE
+    CPR R0, R2
+    LD R1, STR_SAVE_R1
+    LD R2, STR_SAVE_R2
+    LD R3, STR_SAVE_R3
+    RTT
