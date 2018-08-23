@@ -293,7 +293,15 @@ public class LC3 extends ISA
         // Check the privilege bit
         boolean savedPrivilege = (savedPSR & RegisterFile.PRIVILEGE_BIT) != 0;
         registerFile.setPrivMode( savedPrivilege );
-        return registerFile.getRegister( 7 );
+
+        // Get the return address
+        int returnAddress = registerFile.getRegister( 7 );
+
+        // Restore the value of register R7
+        int savedR7 = registerFile.popWord();
+        registerFile.setRegister( 7, savedR7 );
+
+        return returnAddress;
       }
     } );
 
@@ -604,7 +612,7 @@ public class LC3 extends ISA
       {
         // Get the number of bits to shift
         int TReg = getTReg( word );
-        System.out.println( "TReg = " + TReg );
+        //System.out.println( "TReg = " + TReg );
         int bitsToShift = registerFile.getRegister( getTReg( word ) );
 
         // Constrain this to a maximum value of 15.
@@ -954,7 +962,13 @@ public class LC3 extends ISA
     ISA.createDef( "DISABLE_INTERRUPTS","1111 0000 01000001", new TrapDef() );
     ISA.createDef( "ATTACH_ISR",        "1111 0000 01000010", new TrapDef() );
     ISA.createDef( "DETACH_ISR",        "1111 0000 01000011", new TrapDef() );
-    ISA.createDef( "TRAP",              "1111 0000 uuuuuuuu", new TrapDef() );
+    ISA.createDef( "FS_MOUNT_DISK",         "1111 0000 01010000", new TrapDef() );
+    ISA.createDef( "FS_RAW_READ",           "1111 0000 01010001", new TrapDef() );
+    ISA.createDef( "FS_COPY_WORDS",         "1111 0000 01010010", new TrapDef() );
+    ISA.createDef( "FS_OPEN_READ_FILE",     "1111 0000 01010011", new TrapDef() );
+    ISA.createDef( "FS_FIND_INODE",         "1111 0000 01010100", new TrapDef() );
+    ISA.createDef( "FS_STRING_LENGTH",      "1111 0000 01010101", new TrapDef() );
+    ISA.createDef( "TRAP",                  "1111 0000 uuuuuuuu", new TrapDef() );
 
   }
 
@@ -984,6 +998,10 @@ public class LC3 extends ISA
 
     public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
     {
+      // Save the current value in R7
+      int savedR7 = registerFile.getRegister( 7 );
+      registerFile.pushWord( savedR7 );
+
       // Save the current PSR so that the current privilege bit may be restored when the TRAP is done.
       int currentPSR = registerFile.getPSR();
       registerFile.pushWord( currentPSR );
