@@ -9,16 +9,10 @@ import edu.wcsu.WCSUSim.Exceptions.IllegalMemAccessException;
 import edu.wcsu.WCSUSim.WCSUSim;
 
 import javax.swing.SwingUtilities;
+import java.io.*;
 import java.util.ListIterator;
-import java.io.FileNotFoundException;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.File;
 import java.awt.event.ActionListener;
 import java.util.Hashtable;
-import java.io.PrintWriter;
 import java.util.LinkedList;
 import java.util.Stack;
 
@@ -44,6 +38,10 @@ public class Machine implements Runnable
   public static final int NUM_CONTINUES = 400;
   boolean stopImmediately;
   private boolean continueMode;
+
+  // Support for disk device
+  private File             diskFile;
+  private RandomAccessFile inputFile;
 
   private Stack<IntDef> pendingInterrupts = new Stack<>();
 
@@ -255,6 +253,48 @@ public class Machine implements Runnable
   public void clearContinueMode()
   {
     this.continueMode = false;
+  }
+
+  public String mountDiskFile( final File file )
+  {
+
+    final String path = file.getPath();
+    if( !path.endsWith( ".wfs" ) )
+    {
+      return "Filename does not end in .wfs";
+    }
+
+    this.diskFile = file;
+    try
+    {
+      // Open the .obj file
+      inputFile = new RandomAccessFile( file, "rw" );
+      memory.mountDiskFile( inputFile);
+    }
+    catch( FileNotFoundException fnfe )
+    {
+      return fnfe.getMessage();
+    }
+
+    return "Successfully mounted " + file;
+  }
+
+  public String unmountDiskFile( )
+  {
+    try
+    {
+      inputFile.close();
+    }
+    catch( IOException ioe )
+    {
+      System.out.println( "Caught exception closing disk file: " + ioe );
+    }
+    finally
+    {
+      inputFile = null;
+    }
+    memory.unmountDiskFile();
+    return "Successfully unmounted " + diskFile;
   }
 
   public String loadObjectFile( final File file )

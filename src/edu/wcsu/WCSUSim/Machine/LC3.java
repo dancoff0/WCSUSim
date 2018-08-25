@@ -7,6 +7,11 @@ import edu.wcsu.WCSUSim.Exceptions.IllegalMemAccessException;
 
 public class LC3 extends ISA
 {
+  // Constants
+  public static final int SIGNBIT         = 0x00008000;
+  public static final int CARRYBIT        = 0x00010000;
+  public static final int SIXTEENBIT_MASK = 0x0000FFFF;
+
   public void init()
   {
     super.init();
@@ -39,6 +44,7 @@ public class LC3 extends ISA
       {
         final int sValue = registerFile.getRegister( getSReg( word ) );
         registerFile.setRegister( getDReg( word ), sValue );
+        registerFile.setNZP( sValue );
         return pc + 1;
 
       }
@@ -172,10 +178,23 @@ public class LC3 extends ISA
       @Override
       public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
       {
-        final int sValue = registerFile.getRegister( getSReg( word  ) );
-        final int tValue = registerFile.getRegister( getTReg( word  ) );
+        int sValue = registerFile.getRegister( getSReg( word  ) );
+        int tValue = registerFile.getRegister( getTReg( word  ) );
+
+        // Need to check the sign bits
+        if( (sValue & SIGNBIT ) != 0 ) sValue = -sValue;
+        if( (tValue & SIGNBIT ) != 0 ) tValue = -tValue;
         final int nzp = sValue - tValue;
-        registerFile.setNZP( nzp );
+        int sign = 0;
+        if( nzp < 0 )
+        {
+          sign = -1;
+        }
+        else if( nzp > 0 )
+        {
+          sign = +1;
+        }
+        registerFile.setNZP( sign );
         return n + 1;
       }
     } );
@@ -188,7 +207,16 @@ public class LC3 extends ISA
         final int sValue = registerFile.getRegister( getSReg( word ) );
         final int tValue = registerFile.getRegister( getTReg( word ) );
         final int nzp = sValue - tValue;
-        registerFile.setNZP( nzp );
+        int sign = 0;
+        if( nzp < 0 )
+        {
+          sign = -1;
+        }
+        else if( nzp > 0 )
+        {
+          sign = +1;
+        }
+        registerFile.setNZP( sign );
         return n + 1;
       }
     } );
@@ -198,10 +226,20 @@ public class LC3 extends ISA
       @Override
       public int execute( Word word, int n, RegisterFile registerFile, Memory memory, Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
       {
-        final int sValue = registerFile.getRegister( getSReg( word  ) );
+        int sValue = registerFile.getRegister( getSReg( word  ) );
+        if( ( sValue & SIGNBIT ) != 0 ) sValue = -sValue;
         final int iValue = getSignedImmed( word );
         final int nzp = sValue - iValue;
-        registerFile.setNZP( nzp );
+        int sign = 0;
+        if( nzp < 0 )
+        {
+          sign = -1;
+        }
+        else if( nzp > 0 )
+        {
+          sign = +1;
+        }
+        registerFile.setNZP( sign );
         return n + 1;
       }
     } );
@@ -214,7 +252,16 @@ public class LC3 extends ISA
         final int sValue = registerFile.getRegister( getSReg( word  ) );
         final int uValue = getUnsignedImmed( word );
         final int nzp = sValue - uValue;
-        registerFile.setNZP( nzp );
+        int sign = 0;
+        if( nzp < 0 )
+        {
+          sign = -1;
+        }
+        else if( nzp > 0 )
+        {
+          sign = +1;
+        }
+        registerFile.setNZP( sign );
         return n + 1;
       }
     } );
@@ -247,7 +294,15 @@ public class LC3 extends ISA
         // Check the privilege bit
         boolean savedPrivilege = (savedPSR & RegisterFile.PRIVILEGE_BIT) != 0;
         registerFile.setPrivMode( savedPrivilege );
-        return registerFile.getRegister( 7 );
+
+        // Get the return address
+        int returnAddress = registerFile.getRegister( 7 );
+
+        // Restore the value of register R7
+        int savedR7 = registerFile.popWord();
+        registerFile.setRegister( 7, savedR7 );
+
+        return returnAddress;
       }
     } );
 
@@ -343,6 +398,105 @@ public class LC3 extends ISA
         return n + 1;
       }
     } );
+
+    ISA.createDef( "ADDU", "1011 000 ddd sss ttt ", new InstructionDef()
+    {
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException
+      {
+        // Get the values to be added
+        final int sValue = registerFile.getRegister( getSReg( word ) );
+        final int tValue = registerFile.getRegister( getTReg( word ) );
+
+        // Go ahead and add themd
+        int value = sValue + tValue;
+
+        // Check the carry bit
+        if( ( value & CARRYBIT ) != 0 )
+        {
+          registerFile.setC( 1 );
+        }
+        else
+        {
+          registerFile.setC( 0 );
+        }
+
+        // Now mask off the carry bit
+        value &= SIXTEENBIT_MASK;
+
+        // Store the value away
+        registerFile.setRegister( getDReg( word ), value );
+
+        // That's it. Just step to the next instruction.
+        return pc + 1;
+      }
+
+    });
+
+    ISA.createDef( "BRc", "1011 001 ppppppppp", new InstructionDef()
+    {
+      public boolean isBranch()
+          {
+            return true;
+          }
+
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        if( registerFile.getC() )
+        {
+          return pc + 1 + this.getPCOffset( word );
+        }
+        return pc + 1;
+      }
+    } );
+
+    ISA.createDef( "BRnc", "1011 010 ppppppppp", new InstructionDef()
+    {
+      public boolean isBranch()
+      {
+        return true;
+      }
+
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
+      {
+        if( !registerFile.getC() )
+        {
+          return pc + 1 + this.getPCOffset( word );
+        }
+        return pc + 1;
+      }
+    } );
+
+
+    ISA.createDef( "LDU", "1011 1 ddd pppppppp", new InstructionDef()
+    {
+      public boolean isLoad()
+      {
+        return true;
+      }
+
+      public int getRefAddr( final Word word, final int n, final RegisterFile registerFile, final Memory memory ) throws IllegalMemAccessException
+      {
+        return n + 1 + this.getPCOffset( word );
+      }
+
+      public int execute( final Word word, final int pc, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException
+      {
+        final int value = memory.checkAndRead( pc + 1 + this.getPCOffset( word ) ).getValue();
+        registerFile.setRegister( this.getDReg( word ), value );
+        if( value == 0 )
+        {
+          registerFile.setNZP( 0 );
+        }
+        else
+        {
+          registerFile.setNZP( 1 );
+        }
+        return pc + 1;
+      }
+
+    } );
+
+
 
     ISA.createDef( "LDI", "0010 ddd 1 pppppppp", new InstructionDef()
     {
@@ -459,7 +613,7 @@ public class LC3 extends ISA
       {
         // Get the number of bits to shift
         int TReg = getTReg( word );
-        System.out.println( "TReg = " + TReg );
+        //System.out.println( "TReg = " + TReg );
         int bitsToShift = registerFile.getRegister( getTReg( word ) );
 
         // Constrain this to a maximum value of 15.
@@ -809,7 +963,14 @@ public class LC3 extends ISA
     ISA.createDef( "DISABLE_INTERRUPTS","1111 0000 01000001", new TrapDef() );
     ISA.createDef( "ATTACH_ISR",        "1111 0000 01000010", new TrapDef() );
     ISA.createDef( "DETACH_ISR",        "1111 0000 01000011", new TrapDef() );
-    ISA.createDef( "TRAP",              "1111 0000 uuuuuuuu", new TrapDef() );
+    ISA.createDef( "FS_MOUNT_DISK",         "1111 0000 01010000", new TrapDef() );
+    ISA.createDef( "FS_RAW_READ",           "1111 0000 01010001", new TrapDef() );
+    ISA.createDef( "FS_COPY_WORDS",         "1111 0000 01010010", new TrapDef() );
+    ISA.createDef( "FS_OPEN_READ_FILE",     "1111 0000 01010011", new TrapDef() );
+    ISA.createDef( "FS_FIND_INODE",         "1111 0000 01010100", new TrapDef() );
+    ISA.createDef( "FS_STRING_LENGTH",      "1111 0000 01010101", new TrapDef() );
+    ISA.createDef( "FS_READ",               "1111 0000 01010110", new TrapDef() );
+    ISA.createDef( "TRAP",                  "1111 0000 uuuuuuuu", new TrapDef() );
 
   }
 
@@ -839,6 +1000,10 @@ public class LC3 extends ISA
 
     public int execute( final Word word, final int n, final RegisterFile registerFile, final Memory memory, final Machine machine ) throws IllegalMemAccessException, IllegalInstructionException
     {
+      // Save the current value in R7
+      int savedR7 = registerFile.getRegister( 7 );
+      registerFile.pushWord( savedR7 );
+
       // Save the current PSR so that the current privilege bit may be restored when the TRAP is done.
       int currentPSR = registerFile.getPSR();
       registerFile.pushWord( currentPSR );
