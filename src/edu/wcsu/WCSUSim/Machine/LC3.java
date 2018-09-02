@@ -959,6 +959,9 @@ public class LC3 extends ISA
     ISA.createDef( "CLEAR_CONSOLE",     "1111 0000 00100110", new TrapDef() );
     ISA.createDef( "DRAW_RECT",         "1111 0000 00110000", new TrapDef() );
     ISA.createDef( "DRAW_LINE",         "1111 0000 00110001", new TrapDef() );
+    ISA.createDef( "DRAW_CIRCLE",       "1111 0000 00110010", new TrapDef() );
+    ISA.createDef( "PLOT_POINT",        "1111 0000 00110011", new TrapDef() );
+    ISA.createDef( "CLEAR_MONITOR",     "1111 0000 00110100", new TrapDef() );
     ISA.createDef( "ENABLE_INTERRUPTS", "1111 0000 01000000", new TrapDef() );
     ISA.createDef( "DISABLE_INTERRUPTS","1111 0000 01000001", new TrapDef() );
     ISA.createDef( "ATTACH_ISR",        "1111 0000 01000010", new TrapDef() );
