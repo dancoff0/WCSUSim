@@ -49,12 +49,12 @@
 	.FILL BAD_TRAP	; x2D
 	.FILL BAD_TRAP	; x2E
 	.FILL BAD_TRAP	; x2F
-	.FILL TRAP_DRAW_RECT	; x30
-	.FILL TRAP_DRAW_LINE    ; x31
-	.FILL BAD_TRAP	; x32
-	.FILL BAD_TRAP	; x33
-	.FILL BAD_TRAP	; x34
-	.FILL BAD_TRAP	; x35
+	.FILL TRAP_DRAW_RECT	 ; x30
+	.FILL TRAP_DRAW_LINE     ; x31
+	.FILL TRAP_DRAW_CIRCLE   ; x32
+	.FILL TRAP_PLOT_POINT	 ; x33
+	.FILL TRAP_CLEAR_MONITOR ; x34
+	.FILL TRAP_DRAW_SEGMENT	 ; x35
 	.FILL BAD_TRAP	; x36
 	.FILL BAD_TRAP	; x37
 	.FILL BAD_TRAP	; x38
@@ -559,7 +559,8 @@ HIGH_BIT        .FILL x8000
 LOW_8_BITS      .FILL x00FF
 TIM_INIT        .FILL #40
 ;MPR_INIT	.FILL xFFFF	; user can access everything
-MPR_INIT	    .FILL x0FF8	; user can access x3000 to xbfff
+;;MPR_INIT	    .FILL x0FF8	; user can access x3000 to xbfff
+MPR_INIT        .FILL x0C78 ; User may access x3000 to x6FFF and xA000 to xBFFF
 USER_CODE_ADDR	.FILL x3000	; user code starts at x3000
 
 ;;; GETC - Read a single character of input from keyboard device into R0
@@ -639,7 +640,7 @@ TRAP_IN
 	OUT
 	LD R0,OS_SAVE_R0	; restore the character
 	LD R7,OS_IN_SAVE_R7	; restore R7
-	RTT                     ; this doesn't work, because
+	RTT                     ; Return from the trap
 
 
 ;;; PUTSP - Write a NUL-terminated string of characters, packed 2 per
@@ -1058,7 +1059,384 @@ TRAP_DRAW_LINE_END
 TRAP_DRAW_LINE_DX .BLKW   1
 TRAP_DRAW_LINE_DY .BLKW   1
 
+;
+; Draw a circle using Bresenham's Circle Algorithm
+; Register usage
+;
+;	R0	X value at center in pixels
+; 	R1	Y value at center in pixels
+;	R2	Radius in pixels on input, D value during computation
+;	R3	Color
+;	R4	temp
+;	R5	temp
+;	R6	temp
+;   R7  temp
+;
+TRAP_DRAW_CIRCLE
+	;; Save the values in registers 0 - 3 and 5 and 6
+	ST R0, DRAW_CIRCLE_SAVE_R0
+	ST R1, DRAW_CIRCLE_SAVE_R1
+	ST R2, DRAW_CIRCLE_SAVE_R2
+	;;ST R3, VIDEO_SAVE_R3
+	ST R4, DRAW_CIRCLE_SAVE_R4
+	ST R5, DRAW_CIRCLE_SAVE_R5
+	ST R6, DRAW_CIRCLE_SAVE_R6
+	ST R7, DRAW_CIRCLE_SAVE_R7
+
+	;; Sanity checks
+	;; Make sure the bottom point of the circle is not above the monitor
+	CPR R4, R1
+	ADD R4, R4, R2
+	CMPi R4, #0
+	BRn TRAP_DRAW_CIRCLE_END
+
+	;; Make sure the top of the circle is not below the monitor
+	CPR R4, R1
+	SUB R4, R4, R2     ;; R4 is the top Row
+	LD  R5, DRAW_CIRCLE_ROWS
+	CMP R4, R5
+	BRp TRAP_DRAW_CIRCLE_END
+
+	;; Make sure the right edge of the circle is not to the left of the monitor
+	CPR R4, R0
+	ADD R4, R4, R2
+	CMPi R4, #0
+	BRn TRAP_DRAW_CIRCLE_END
+
+	;; Make sure the left edge of the circle is not to the right of the monitor
+	CPR R4, R0
+	SUB R4, R4, R2  ;; R4 is now the left edge
+	LD  R5, DRAW_CIRCLE_COLUMNS
+	CMP R4, R5
+	BRp TRAP_DRAW_CIRCLE_END
+
+	;; At least some portion of the circle will fit on the monitor
+    ;; Set the initial x and y values
+    CLR R4         ;; Initially, x = 0
+    SUB R5, R4, R2 ;; Initially, y = -r
+
+	;; Compute the initial value of D.
+	;; Note that we crunch the value of r since we don't need it anymore.
+	;;ADD   R2, R2, R2
+	;;ADD   R2, R2, #3  ;; D = 3 + 2*r
+	ADD R2, R5, #1   ;; D = 1 - r
+
+	;; See if we are done:
+	;; Loop for as long as  -y >= x; When they are equal
+	;; we have completed traversing the octant.
+TRAP_DRAW_CIRCLE_TOP_OF_LOOP
+	ADD R7, R4, R5
+	BRp TRAP_DRAW_CIRCLE_END
+
+	;; Plot the current point
+	PLOT_POINT
+
+	;; See if we are to fill the circle
+	CPR R3, R3
+	BRzp TRAP_DRAW_CIRCLE_REFLECT_ONE
+	DRAW_SEGMENT   ;; DRAW_SEGMENT
+
+	;; Now reflect it to display the other 7 octants
+	;;(-x, y)
+TRAP_DRAW_CIRCLE_REFLECT_ONE
+	NOT R4, R4
+	ADD R4, R4, #1 ;; x --> -x
+	PLOT_POINT
+
+	;; (-x, -y)
+	NOT R5, R5
+	ADD R5, R5, #1
+	PLOT_POINT
+
+	;; (x, -y)
+	NOT R4, R4
+	ADD R4, R4, #1
+	PLOT_POINT
+
+    ;; See if we are fill this.
+    CPR R3, R3
+    BRzp TRAP_DRAW_CIRCLE_REFLECT_TWO
+    DRAW_SEGMENT    ;; Draw the segment
+
+    ;; Put things back and ...
+TRAP_DRAW_CIRCLE_REFLECT_TWO
+    NOT R5, R5
+    ADD R5, R5, #1
+
+    ;; ... swap x and y
+    CPR R7, R4
+    CPR R4, R5
+    CPR R5, R7
+
+    ;; (y, x)
+    PLOT_POINT
+
+    ;; (-y, x)
+    NOT R4, R4
+    ADD R4, R4, #1 ;; x --> -x
+    PLOT_POINT
+
+    ;; See if we are fill this.
+    CPR R3, R3
+    BRzp TRAP_DRAW_CIRCLE_REFLECT_THREE
+    DRAW_SEGMENT    ;; Draw the segment
+
+    ;; (-y, -x)
+TRAP_DRAW_CIRCLE_REFLECT_THREE
+    NOT R5, R5
+    ADD R5, R5, #1
+    PLOT_POINT
+
+    ;; See if we are fill this.
+    CPR R3, R3
+    BRzp TRAP_DRAW_CIRCLE_REFLECT_FOUR
+    DRAW_SEGMENT    ;; Draw the segment
+
+    ;; (y, -x)
+TRAP_DRAW_CIRCLE_REFLECT_FOUR
+    NOT R4, R4
+    ADD R4, R4, #1
+    PLOT_POINT
+
+    ;; Put things back and ...
+     NOT R5, R5
+     ADD R5, R5, #1
+
+     ;; "unswap" x and y
+     CPR R7, R4
+     CPR R4, R5
+     CPR R5, R7
+
+	;; Now update x and y
+
+	;; First, check the value of D
+	CMPi R2, #0
+	BRnz TRAP_DRAW_CIRCLE_STAY_AT_SAME_Y
+
+	;; We need to update D, then increase x and y by one
+	ADD R2, R2, R4
+	ADD R2, R2, R4  ;; D += 2*x
+    ADD R2, R2, R5
+    ADD R2, R2, R5  ;; D += 2*y
+    ADD R2, R2, #5  ;; D = D + 2*(x +y) + 5
+    ADD R5, R5, #1  ;; y += 1
+    ADD R4, R4, #1  ;; x += 1
+    BR TRAP_DRAW_CIRCLE_TOP_OF_LOOP
+
+
+TRAP_DRAW_CIRCLE_STAY_AT_SAME_Y
+    ;; Y will stay the same for this iteration. Update D, then increment X
+    ADD R2, R2, R4
+    ADD R2, R2, R4   ;; D += 2*x
+    ADD R2, R2, #3   ;; D = D + 2*x + 3
+    ADD R4, R4, #1   ;; x += 1
+    BR TRAP_DRAW_CIRCLE_TOP_OF_LOOP
+
+TRAP_DRAW_CIRCLE_END
+    ;; Restore the registers
+    LD R0, DRAW_CIRCLE_SAVE_R0
+    LD R1, DRAW_CIRCLE_SAVE_R1
+    LD R2, DRAW_CIRCLE_SAVE_R2
+    ;;LD R3, VIDEO_SAVE_R3
+    LD R4,DRAW_CIRCLE_SAVE_R4
+    LD R5, DRAW_CIRCLE_SAVE_R5
+    LD R6, DRAW_CIRCLE_SAVE_R6
+    LD R7, DRAW_CIRCLE_SAVE_R7
+
+    ;; That's it
+    RTT
+
+;; Constants
+DRAW_CIRCLE_ROWS    .FILL #124
+DRAW_CIRCLE_COLUMNS .FILL #128
+
+;; Register storage
+DRAW_CIRCLE_SAVE_R0 .BLKW 1
+DRAW_CIRCLE_SAVE_R1 .BLKW 1
+DRAW_CIRCLE_SAVE_R2 .BLKW 1
+DRAW_CIRCLE_SAVE_R4 .BLKW 1
+DRAW_CIRCLE_SAVE_R5 .BLKW 1
+DRAW_CIRCLE_SAVE_R6 .BLKW 1
+DRAW_CIRCLE_SAVE_R7 .BLKW 1
+
+TRAP_PLOT_POINT
+;;
+;; Draw a point at the given location with an offset
+;; Register usage
+;;    R0     X value at the offset
+;;    R1     Y value at the offset
+;;    R2     temp
+;;    R3     Color
+;;    R4     X value
+;;    R5     Y value
+;;    R6     temp
+    ST R2, VIDEO_PLOT_SAVE_R2
+    ST R4, VIDEO_PLOT_SAVE_R4
+    ST R5, VIDEO_PLOT_SAVE_R5
+    ST R6, VIDEO_PLOT_SAVE_R6
+
+    ;; Add the coordinates of the offset to the given point
+    ADD R4, R4, R0
+    ADD R5, R5, R1
+
+    ;; Compute the memory location corresponding to x and y
+    SHFli R6, R5, #7    ; R6 = y* 128
+    LD	  R2, PLOT_POINT_MEM_START
+    ADD	  R6, R6, R2	; R6 = &VIDEO_ME + row * 128
+    ADD	  R6, R6, R4    ; R6 = &VIDEO_MEM + y*128 + x
+
+    ;; Sanity checks
+    ;; Check that the memory location is not before the monitor's memory
+    CMPU R6, R2
+    BRn TRAP_POINT_PLOT_END
+
+    ;; Check that the memory location is not after the monitor's memory
+    LD  R2, PLOT_POINT_MEM_END
+    CMPU R6, R2
+    BRp TRAP_POINT_PLOT_END
+
+    ;; Store the color in the pixel
+    STR	R3, R6, #0
+
+TRAP_POINT_PLOT_END
+    LD R2, VIDEO_PLOT_SAVE_R2
+    LD R4, VIDEO_PLOT_SAVE_R4
+    LD R5, VIDEO_PLOT_SAVE_R5
+    LD R6, VIDEO_PLOT_SAVE_R6
+    RTT
+
+;; Register storage
+VIDEO_PLOT_SAVE_R2 .BLKW 1
+VIDEO_PLOT_SAVE_R4 .BLKW 1
+VIDEO_PLOT_SAVE_R5 .BLKW 1
+VIDEO_PLOT_SAVE_R6 .BLKW 1
+PLOT_POINT_MEM_START    .FILL xC000
+PLOT_POINT_MEM_END      .FILL xFDFF
+
+TRAP_DRAW_SEGMENT
+;;
+;; Draw a line segment at the given location with an offset
+;; Register usage
+;;    R0     X value at the offset
+;;    R1     Y value at the offset
+;;    R2     Length of segment
+;;    R3     Color
+;;    R4     Beginning X value -- assumed positive
+;;    R5     Y value
+;;    R6     temp
+    ST R0, VIDEO_DRAW_SEGMENT_SAVE_R0
+    ST R2, VIDEO_DRAW_SEGMENT_SAVE_R2
+    ST R4, VIDEO_DRAW_SEGMENT_SAVE_R4
+    ST R5, VIDEO_DRAW_SEGMENT_SAVE_R5
+    ST R6, VIDEO_DRAW_SEGMENT_SAVE_R6
+
+    ;; Save the length of the segment
+    CPR R2, R4
+    ADD R2, R2, R2
+
+    ;; Add the coordinates of the offset to the given point
+    ADD R4, R4, R0
+    ADD R5, R5, R1
+
+    ;; Check if the Y value is above or below the video area
+    BRn   TRAP_DRAW_SEGMENT_END
+    LD    R0, DRAW_CIRCLE_ROWS
+    CMPU  R5, R0
+    BRp   TRAP_DRAW_SEGMENT_END
+
+    ;; Likewise, check if the starting point is to the left of the video area.
+    ;; Then the entire segment will be to the left of the monitor
+    SUB     R6, R4, R2
+    LD      R0, DRAW_CIRCLE_COLUMNS
+    CMPU    R6, R0
+    BRp     TRAP_DRAW_SEGMENT_END
+
+    ;; Compute the memory location corresponding to y
+    SHFli R5, R5, #7    ; R5 = y* 128
+    LD	  R6, PLOT_POINT_MEM_START
+    ADD	  R5, R5, R6	; R6 = &VIDEO_ME + row * 128
+
+    ;; Reload the counter. This sets the condition codes
+    CPR R2, R2
+
+TRAP_DRAW_SEGMENT_TOP_OF_LOOP
+    BRnz TRAP_DRAW_SEGMENT_END
+
+    ;; Check the X value
+    CPR     R4, R4
+    BRn     TRAP_DRAW_SEGMENT_UPDATE  ;; It's off the screen to the left
+    CMPU    R4, R0
+    BRp     TRAP_DRAW_SEGMENT_UPDATE ;; It's off the screen to the right
+
+    ;; Do the actual plotting
+    ADD	  R6, R5, R4    ; R6 = &VIDEO_MEM + y*128 + x
+
+   ;; Store the color in the pixel
+    STR	R3, R6, #0
+
+TRAP_DRAW_SEGMENT_UPDATE
+    ;; Decrement the X value
+    ADD R4, R4, #-1
+    ;; Decrement the counter
+    ADD R2, R2, #-1
+    BR TRAP_DRAW_SEGMENT_TOP_OF_LOOP
+
+TRAP_DRAW_SEGMENT_END
+    LD R0, VIDEO_DRAW_SEGMENT_SAVE_R0
+    LD R2, VIDEO_DRAW_SEGMENT_SAVE_R2
+    LD R4, VIDEO_DRAW_SEGMENT_SAVE_R4
+    LD R5, VIDEO_DRAW_SEGMENT_SAVE_R5
+    LD R6, VIDEO_DRAW_SEGMENT_SAVE_R6
+    RTT
+
+;; Register storage
+VIDEO_DRAW_SEGMENT_SAVE_R0 .BLKW 1
+VIDEO_DRAW_SEGMENT_SAVE_R2 .BLKW 1
+VIDEO_DRAW_SEGMENT_SAVE_R4 .BLKW 1
+VIDEO_DRAW_SEGMENT_SAVE_R5 .BLKW 1
+VIDEO_DRAW_SEGMENT_SAVE_R6 .BLKW 1
+;;PLOT_POINT_MEM_START    .FILL xC000
+;;PLOT_POINT_MEM_END      .FILL xFDFF
+
+
+;; Clear the monitor
+;;   Register Usage:
+;;      No registers are needed on input
+;;      No value is returned on exit
+;;;     The following registers are used during execution
+;;        R2   address of the current pixel
+;;        R4   address of the last pixel
+;;        R5   color
+TRAP_CLEAR_MONITOR
+    ST R2, VIDEO_PLOT_SAVE_R2
+    ST R4, VIDEO_PLOT_SAVE_R4
+    ST R5, VIDEO_PLOT_SAVE_R5
+
+    LD R2, PLOT_POINT_MEM_START
+    LD R4, PLOT_POINT_MEM_END
+    CLR R5 ;; We'll be filling the monitor space with black
+
+TRAP_CLEAR_MONITOR_TOP_OF_LOOP
+    ;; Check if we're done
+    CMPU R2, R4
+    BRzp TRAP_CLEAR_MONITOR_DONE
+
+    ;; Store the color in the pixel
+    STR R5, R2, #0
+
+    ;; Go on to the next pixel
+    ADD R2, R2, #1
+    BR TRAP_CLEAR_MONITOR_TOP_OF_LOOP
+
+TRAP_CLEAR_MONITOR_DONE
+    ;; Restore the registers
+    LD R2, VIDEO_PLOT_SAVE_R2
+    LD R4, VIDEO_PLOT_SAVE_R4
+    LD R5, VIDEO_PLOT_SAVE_R5
+    RTT
+;;----------------------------------------------
 ;; Interrupt handling
+;;----------------------------------------------
 INT_SAVE_R0 .BLKW 1
 INT_SAVE_R1 .BLKW 1
 INT_SAVE_R2 .BLKW 1
