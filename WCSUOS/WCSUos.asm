@@ -54,7 +54,7 @@
 	.FILL TRAP_DRAW_CIRCLE   ; x32
 	.FILL TRAP_PLOT_POINT	 ; x33
 	.FILL TRAP_CLEAR_MONITOR ; x34
-	.FILL BAD_TRAP	; x35
+	.FILL TRAP_DRAW_SEGMENT	 ; x35
 	.FILL BAD_TRAP	; x36
 	.FILL BAD_TRAP	; x37
 	.FILL BAD_TRAP	; x38
@@ -559,7 +559,8 @@ HIGH_BIT        .FILL x8000
 LOW_8_BITS      .FILL x00FF
 TIM_INIT        .FILL #40
 ;MPR_INIT	.FILL xFFFF	; user can access everything
-MPR_INIT	    .FILL x0FF8	; user can access x3000 to xbfff
+;;MPR_INIT	    .FILL x0FF8	; user can access x3000 to xbfff
+MPR_INIT        .FILL x0C78 ; User may access x3000 to x6FFF and xA000 to xBFFF
 USER_CODE_ADDR	.FILL x3000	; user code starts at x3000
 
 ;;; GETC - Read a single character of input from keyboard device into R0
@@ -639,7 +640,7 @@ TRAP_IN
 	OUT
 	LD R0,OS_SAVE_R0	; restore the character
 	LD R7,OS_IN_SAVE_R7	; restore R7
-	RTT                     ; this doesn't work, because
+	RTT                     ; Return from the trap
 
 
 ;;; PUTSP - Write a NUL-terminated string of characters, packed 2 per
@@ -1130,8 +1131,14 @@ TRAP_DRAW_CIRCLE_TOP_OF_LOOP
 	;; Plot the current point
 	PLOT_POINT
 
+	;; See if we are to fill the circle
+	CPR R3, R3
+	BRzp TRAP_DRAW_CIRCLE_REFLECT_ONE
+	DRAW_SEGMENT   ;; DRAW_SEGMENT
+
 	;; Now reflect it to display the other 7 octants
 	;;(-x, y)
+TRAP_DRAW_CIRCLE_REFLECT_ONE
 	NOT R4, R4
 	ADD R4, R4, #1 ;; x --> -x
 	PLOT_POINT
@@ -1146,7 +1153,13 @@ TRAP_DRAW_CIRCLE_TOP_OF_LOOP
 	ADD R4, R4, #1
 	PLOT_POINT
 
+    ;; See if we are fill this.
+    CPR R3, R3
+    BRzp TRAP_DRAW_CIRCLE_REFLECT_TWO
+    DRAW_SEGMENT    ;; Draw the segment
+
     ;; Put things back and ...
+TRAP_DRAW_CIRCLE_REFLECT_TWO
     NOT R5, R5
     ADD R5, R5, #1
 
@@ -1163,12 +1176,24 @@ TRAP_DRAW_CIRCLE_TOP_OF_LOOP
     ADD R4, R4, #1 ;; x --> -x
     PLOT_POINT
 
+    ;; See if we are fill this.
+    CPR R3, R3
+    BRzp TRAP_DRAW_CIRCLE_REFLECT_THREE
+    DRAW_SEGMENT    ;; Draw the segment
+
     ;; (-y, -x)
+TRAP_DRAW_CIRCLE_REFLECT_THREE
     NOT R5, R5
     ADD R5, R5, #1
     PLOT_POINT
 
+    ;; See if we are fill this.
+    CPR R3, R3
+    BRzp TRAP_DRAW_CIRCLE_REFLECT_FOUR
+    DRAW_SEGMENT    ;; Draw the segment
+
     ;; (y, -x)
+TRAP_DRAW_CIRCLE_REFLECT_FOUR
     NOT R4, R4
     ADD R4, R4, #1
     PLOT_POINT
@@ -1288,6 +1313,92 @@ VIDEO_PLOT_SAVE_R6 .BLKW 1
 PLOT_POINT_MEM_START    .FILL xC000
 PLOT_POINT_MEM_END      .FILL xFDFF
 
+TRAP_DRAW_SEGMENT
+;;
+;; Draw a line segment at the given location with an offset
+;; Register usage
+;;    R0     X value at the offset
+;;    R1     Y value at the offset
+;;    R2     Length of segment
+;;    R3     Color
+;;    R4     Beginning X value -- assumed positive
+;;    R5     Y value
+;;    R6     temp
+    ST R0, VIDEO_DRAW_SEGMENT_SAVE_R0
+    ST R2, VIDEO_DRAW_SEGMENT_SAVE_R2
+    ST R4, VIDEO_DRAW_SEGMENT_SAVE_R4
+    ST R5, VIDEO_DRAW_SEGMENT_SAVE_R5
+    ST R6, VIDEO_DRAW_SEGMENT_SAVE_R6
+
+    ;; Save the length of the segment
+    CPR R2, R4
+    ADD R2, R2, R2
+
+    ;; Add the coordinates of the offset to the given point
+    ADD R4, R4, R0
+    ADD R5, R5, R1
+
+    ;; Check if the Y value is above or below the video area
+    BRn   TRAP_DRAW_SEGMENT_END
+    LD    R0, DRAW_CIRCLE_ROWS
+    CMPU  R5, R0
+    BRp   TRAP_DRAW_SEGMENT_END
+
+    ;; Likewise, check if the starting point is to the left of the video area.
+    ;; Then the entire segment will be to the left of the monitor
+    SUB     R6, R4, R2
+    LD      R0, DRAW_CIRCLE_COLUMNS
+    CMPU    R6, R0
+    BRp     TRAP_DRAW_SEGMENT_END
+
+    ;; Compute the memory location corresponding to y
+    SHFli R5, R5, #7    ; R5 = y* 128
+    LD	  R6, PLOT_POINT_MEM_START
+    ADD	  R5, R5, R6	; R6 = &VIDEO_ME + row * 128
+
+    ;; Reload the counter. This sets the condition codes
+    CPR R2, R2
+
+TRAP_DRAW_SEGMENT_TOP_OF_LOOP
+    BRnz TRAP_DRAW_SEGMENT_END
+
+    ;; Check the X value
+    CPR     R4, R4
+    BRn     TRAP_DRAW_SEGMENT_UPDATE  ;; It's off the screen to the left
+    CMPU    R4, R0
+    BRp     TRAP_DRAW_SEGMENT_UPDATE ;; It's off the screen to the right
+
+    ;; Do the actual plotting
+    ADD	  R6, R5, R4    ; R6 = &VIDEO_MEM + y*128 + x
+
+   ;; Store the color in the pixel
+    STR	R3, R6, #0
+
+TRAP_DRAW_SEGMENT_UPDATE
+    ;; Decrement the X value
+    ADD R4, R4, #-1
+    ;; Decrement the counter
+    ADD R2, R2, #-1
+    BR TRAP_DRAW_SEGMENT_TOP_OF_LOOP
+
+TRAP_DRAW_SEGMENT_END
+    LD R0, VIDEO_DRAW_SEGMENT_SAVE_R0
+    LD R2, VIDEO_DRAW_SEGMENT_SAVE_R2
+    LD R4, VIDEO_DRAW_SEGMENT_SAVE_R4
+    LD R5, VIDEO_DRAW_SEGMENT_SAVE_R5
+    LD R6, VIDEO_DRAW_SEGMENT_SAVE_R6
+    RTT
+
+;; Register storage
+VIDEO_DRAW_SEGMENT_SAVE_R0 .BLKW 1
+VIDEO_DRAW_SEGMENT_SAVE_R2 .BLKW 1
+VIDEO_DRAW_SEGMENT_SAVE_R4 .BLKW 1
+VIDEO_DRAW_SEGMENT_SAVE_R5 .BLKW 1
+VIDEO_DRAW_SEGMENT_SAVE_R6 .BLKW 1
+;;PLOT_POINT_MEM_START    .FILL xC000
+;;PLOT_POINT_MEM_END      .FILL xFDFF
+
+
 ;; Clear the monitor
 ;;   Register Usage:
 ;;      No registers are needed on input
@@ -1307,7 +1418,7 @@ TRAP_CLEAR_MONITOR
 
 TRAP_CLEAR_MONITOR_TOP_OF_LOOP
     ;; Check if we're done
-    CMP R2, R4
+    CMPU R2, R4
     BRzp TRAP_CLEAR_MONITOR_DONE
 
     ;; Store the color in the pixel

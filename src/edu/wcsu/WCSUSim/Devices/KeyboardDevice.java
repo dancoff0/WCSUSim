@@ -238,7 +238,6 @@ public class KeyboardDevice
               //System.out.println( "Signaling an additional interrupt for the keyboard" );
               memory.getMachine().signalInterrupt( interruptVector );
             }
-
           }
         }
         catch( IOException ioe )
